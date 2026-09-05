@@ -61,6 +61,112 @@ def _pytorch_lama_allowed() -> bool:
     return _env_flag("VSR_ENABLE_PYTORCH_LAMA")
 
 
+def _tile_rects(frame_shape, mask: np.ndarray, tile_size: int,
+                overlap: int) -> list:
+    """Tiles covering the masked region, in the order they are blended.
+
+    Split out of the three tiled paths so the accumulator bounds can be known
+    before any inference runs. Every rectangle is clamped to the frame, so a
+    tile near the top or left edge can start before the padded ROI does, which
+    is why the caller takes the union of these rather than trusting the ROI.
+    """
+    h, w = frame_shape[:2]
+    ys = mask.any(axis=1)
+    if not ys.any():
+        return []
+    xs = mask.any(axis=0)
+    y_indices = np.where(ys)[0]
+    x_indices = np.where(xs)[0]
+    roi_y1 = max(0, int(y_indices[0]) - overlap)
+    roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
+    roi_x1 = max(0, int(x_indices[0]) - overlap)
+    roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
+    step = max(1, tile_size - overlap)
+    rects = []
+    for ty in range(roi_y1, roi_y2, step):
+        for tx in range(roi_x1, roi_x2, step):
+            ty2 = min(ty + tile_size, h)
+            tx2 = min(tx + tile_size, w)
+            ty1 = max(0, ty2 - tile_size)
+            tx1 = max(0, tx2 - tile_size)
+            if mask[ty1:ty2, tx1:tx2].max() == 0:
+                continue
+            rects.append((ty1, ty2, tx1, tx2))
+    return rects
+
+
+def _tile_window(th: int, tw: int, overlap: int) -> np.ndarray:
+    """Raised-cosine taper so neighbouring tiles cross-fade at their seams."""
+    wy = np.ones(th, dtype=np.float32)
+    wx = np.ones(tw, dtype=np.float32)
+    if overlap > 0:
+        ramp = min(overlap, th // 2, tw // 2)
+        if ramp > 0:
+            taper = 0.5 - 0.5 * np.cos(
+                np.linspace(
+                    0.5 * np.pi / ramp,
+                    np.pi - 0.5 * np.pi / ramp,
+                    ramp,
+                    dtype=np.float32,
+                ))
+            wy[:ramp] *= taper
+            wy[-ramp:] *= taper[::-1]
+            wx[:ramp] *= taper
+            wx[-ramp:] *= taper[::-1]
+    return np.outer(wy, wx)
+
+
+def _blend_tiles(frame: np.ndarray, mask: np.ndarray, tile_size: int,
+                 overlap: int, inpaint_tile) -> np.ndarray:
+    """Repair a frame tile by tile, accumulating only over the tiles used.
+
+    RM-359: the ONNX, OpenCV DNN and PyTorch paths each carried their own copy
+    of this loop, and each allocated two full-frame float32 accumulators and
+    blended across the whole picture. At 3840x2160 that is about 133 MB of
+    accumulator plus three 33 MB temporaries per frame to repair a caption
+    strip covering a few percent of it. The tiles are known before inference
+    runs, so the buffers are sized to their union instead.
+
+    Output is unchanged. The blend still writes a float into a uint8 array,
+    which truncates rather than rounds, and pixels no tile covered still keep
+    their source value.
+    """
+    rects = _tile_rects(frame.shape, mask, tile_size, overlap)
+    if not rects:
+        return frame.copy()
+
+    acc_y1 = min(rect[0] for rect in rects)
+    acc_y2 = max(rect[1] for rect in rects)
+    acc_x1 = min(rect[2] for rect in rects)
+    acc_x2 = max(rect[3] for rect in rects)
+    channels = frame.shape[2]
+    weight_acc = np.zeros((acc_y2 - acc_y1, acc_x2 - acc_x1), dtype=np.float32)
+    color_acc = np.zeros(
+        (acc_y2 - acc_y1, acc_x2 - acc_x1, channels), dtype=np.float32)
+
+    for ty1, ty2, tx1, tx2 in rects:
+        tile_out = inpaint_tile(frame[ty1:ty2, tx1:tx2], mask[ty1:ty2, tx1:tx2])
+        th, tw = tile_out.shape[:2]
+        win = _tile_window(th, tw, overlap)
+        oy = ty1 - acc_y1
+        ox = tx1 - acc_x1
+        color_acc[oy:oy + th, ox:ox + tw] += (
+            tile_out.astype(np.float32) * win[..., None])
+        weight_acc[oy:oy + th, ox:ox + tw] += win
+
+    result = frame.copy()
+    region = result[acc_y1:acc_y2, acc_x1:acc_x2]
+    blend_mask = weight_acc > 0
+    for channel in range(channels):
+        region[:, :, channel] = np.where(
+            blend_mask,
+            (color_acc[:, :, channel] / np.maximum(weight_acc, 1e-6)
+             ).clip(0, 255),
+            region[:, :, channel],
+        )
+    return result
+
+
 def _find_lama_onnx_weight() -> Optional[str]:
     """Auto-discover a LaMa ONNX weight file. Resolution order:
     1. VSR_LAMA_ONNX env var (explicit)
@@ -533,68 +639,8 @@ class LAMAInpainter(BaseInpainter):
 
     def _inpaint_onnx_tiled(self, frame: np.ndarray, mask: np.ndarray,
                             tile_size: int, overlap: int) -> np.ndarray:
-        h, w = frame.shape[:2]
-        ys = mask.any(axis=1)
-        xs = mask.any(axis=0)
-        if not ys.any():
-            return frame.copy()
-        y_indices = np.where(ys)[0]
-        x_indices = np.where(xs)[0]
-        roi_y1 = max(0, int(y_indices[0]) - overlap)
-        roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
-        roi_x1 = max(0, int(x_indices[0]) - overlap)
-        roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
-        step = max(1, tile_size - overlap)
-        result = frame.copy()
-        weight_acc = np.zeros((h, w), dtype=np.float32)
-        color_acc = np.zeros_like(frame, dtype=np.float32)
-        tile_count = 0
-        for ty in range(roi_y1, roi_y2, step):
-            for tx in range(roi_x1, roi_x2, step):
-                ty2 = min(ty + tile_size, h)
-                tx2 = min(tx + tile_size, w)
-                ty1 = max(0, ty2 - tile_size)
-                tx1 = max(0, tx2 - tile_size)
-                tile_mask = mask[ty1:ty2, tx1:tx2]
-                if tile_mask.max() == 0:
-                    continue
-                tile_frame = frame[ty1:ty2, tx1:tx2]
-                tile_out = self._inpaint_onnx_one(tile_frame, tile_mask)
-                th, tw = tile_out.shape[:2]
-                wy = np.ones(th, dtype=np.float32)
-                wx = np.ones(tw, dtype=np.float32)
-                if overlap > 0:
-                    ramp = min(overlap, th // 2, tw // 2)
-                    if ramp > 0:
-                        taper = 0.5 - 0.5 * np.cos(
-                            np.linspace(
-                                0.5 * np.pi / ramp,
-                                np.pi - 0.5 * np.pi / ramp,
-                                ramp,
-                                dtype=np.float32,
-                            ))
-                        wy[:ramp] *= taper
-                        wy[-ramp:] *= taper[::-1]
-                        wx[:ramp] *= taper
-                        wx[-ramp:] *= taper[::-1]
-                win = np.outer(wy, wx)
-                color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32) * win[..., None]
-                weight_acc[ty1:ty2, tx1:tx2] += win
-                tile_count += 1
-        if tile_count > 0:
-            blend_mask = weight_acc > 0
-            for c in range(3):
-                result[:, :, c] = np.where(
-                    blend_mask,
-                    (color_acc[:, :, c] / np.maximum(weight_acc, 1e-6)).clip(0, 255),
-                    frame[:, :, c],
-                )
-            result = result.astype(np.uint8)
-        return result
-
-    # ------------------------------------------------------------------
-    # OpenCV 5 DNN path
-    # ------------------------------------------------------------------
+        return _blend_tiles(frame, mask, tile_size, overlap,
+                            self._inpaint_onnx_one)
 
     def _inpaint_cv2dnn(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         tile_size = self.config.lama_tile_size
@@ -653,70 +699,8 @@ class LAMAInpainter(BaseInpainter):
 
     def _inpaint_cv2dnn_tiled(self, frame: np.ndarray, mask: np.ndarray,
                               tile_size: int, overlap: int) -> np.ndarray:
-        h, w = frame.shape[:2]
-        ys = mask.any(axis=1)
-        xs = mask.any(axis=0)
-        if not ys.any():
-            return frame.copy()
-        y_indices = np.where(ys)[0]
-        x_indices = np.where(xs)[0]
-        roi_y1 = max(0, int(y_indices[0]) - overlap)
-        roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
-        roi_x1 = max(0, int(x_indices[0]) - overlap)
-        roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
-        step = max(1, tile_size - overlap)
-        result = frame.copy()
-        weight_acc = np.zeros((h, w), dtype=np.float32)
-        color_acc = np.zeros_like(frame, dtype=np.float32)
-        tile_count = 0
-        for ty in range(roi_y1, roi_y2, step):
-            for tx in range(roi_x1, roi_x2, step):
-                ty2 = min(ty + tile_size, h)
-                tx2 = min(tx + tile_size, w)
-                ty1 = max(0, ty2 - tile_size)
-                tx1 = max(0, tx2 - tile_size)
-                tile_mask = mask[ty1:ty2, tx1:tx2]
-                if tile_mask.max() == 0:
-                    continue
-                tile_frame = frame[ty1:ty2, tx1:tx2]
-                tile_out = self._inpaint_cv2dnn_one(tile_frame, tile_mask)
-                th, tw = tile_out.shape[:2]
-                wy = np.ones(th, dtype=np.float32)
-                wx = np.ones(tw, dtype=np.float32)
-                if overlap > 0:
-                    ramp = min(overlap, th // 2, tw // 2)
-                    if ramp > 0:
-                        taper = 0.5 - 0.5 * np.cos(
-                            np.linspace(
-                                0.5 * np.pi / ramp,
-                                np.pi - 0.5 * np.pi / ramp,
-                                ramp,
-                                dtype=np.float32,
-                            ))
-                        wy[:ramp] *= taper
-                        wy[-ramp:] *= taper[::-1]
-                        wx[:ramp] *= taper
-                        wx[-ramp:] *= taper[::-1]
-                win = np.outer(wy, wx)
-                color_acc[ty1:ty2, tx1:tx2] += (
-                    tile_out.astype(np.float32) * win[..., None])
-                weight_acc[ty1:ty2, tx1:tx2] += win
-                tile_count += 1
-        if tile_count > 0:
-            blend_mask = weight_acc > 0
-            for c in range(3):
-                result[:, :, c] = np.where(
-                    blend_mask,
-                    (color_acc[:, :, c] / np.maximum(
-                        weight_acc, 1e-6)).clip(0, 255),
-                    frame[:, :, c],
-                )
-            result = result.astype(np.uint8)
-        return result
-
-    # ------------------------------------------------------------------
-    # PyTorch path (simple-lama-inpainting fallback)
-    # ------------------------------------------------------------------
+        return _blend_tiles(frame, mask, tile_size, overlap,
+                            self._inpaint_cv2dnn_one)
 
     def _inpaint_pytorch(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if (os.environ.get("VSR_LAMA_BATCH", "").strip().lower()
@@ -772,78 +756,23 @@ class LAMAInpainter(BaseInpainter):
 
     def _inpaint_pytorch_tiled(self, frame: np.ndarray, mask: np.ndarray,
                                tile_size: int, overlap: int) -> np.ndarray:
-        from PIL import Image
-        h, w = frame.shape[:2]
-        ys = mask.any(axis=1)
-        xs = mask.any(axis=0)
-        if not ys.any():
-            return frame.copy()
-        y_indices = np.where(ys)[0]
-        x_indices = np.where(xs)[0]
-        roi_y1 = max(0, int(y_indices[0]) - overlap)
-        roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
-        roi_x1 = max(0, int(x_indices[0]) - overlap)
-        roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
-        step = max(1, tile_size - overlap)
-        result = frame.copy()
-        weight_acc = np.zeros((h, w), dtype=np.float32)
-        color_acc = np.zeros_like(frame, dtype=np.float32)
-        tile_count = 0
-        for ty in range(roi_y1, roi_y2, step):
-            for tx in range(roi_x1, roi_x2, step):
-                ty2 = min(ty + tile_size, h)
-                tx2 = min(tx + tile_size, w)
-                ty1 = max(0, ty2 - tile_size)
-                tx1 = max(0, tx2 - tile_size)
-                tile_mask = mask[ty1:ty2, tx1:tx2]
-                if tile_mask.max() == 0:
-                    continue
-                tile_frame = frame[ty1:ty2, tx1:tx2]
-                tile_rgb = cv2.cvtColor(tile_frame, cv2.COLOR_BGR2RGB)
-                pil_tile = Image.fromarray(tile_rgb)
-                pil_mask = Image.fromarray(tile_mask)
-                pil_out = self._lama(pil_tile, pil_mask)
-                tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
-                tile_h, tile_w = tile_frame.shape[:2]
-                tile_out = tile_out[:tile_h, :tile_w]
-                if tile_out.shape[:2] != (tile_h, tile_w):
-                    raise ValueError(
-                        "LaMa tile output is smaller than the source tile"
-                    )
+        return _blend_tiles(frame, mask, tile_size, overlap,
+                            self._inpaint_pytorch_one)
 
-                th, tw = tile_out.shape[:2]
-                wy = np.ones(th, dtype=np.float32)
-                wx = np.ones(tw, dtype=np.float32)
-                if overlap > 0:
-                    ramp = min(overlap, th // 2, tw // 2)
-                    if ramp > 0:
-                        taper = 0.5 - 0.5 * np.cos(
-                            np.linspace(
-                                0.5 * np.pi / ramp,
-                                np.pi - 0.5 * np.pi / ramp,
-                                ramp,
-                                dtype=np.float32,
-                            ))
-                        wy[:ramp] *= taper
-                        wy[-ramp:] *= taper[::-1]
-                        wx[:ramp] *= taper
-                        wx[-ramp:] *= taper[::-1]
-                win = np.outer(wy, wx)
-                color_acc[ty1:ty2, tx1:tx2] += (
-                    tile_out.astype(np.float32) * win[..., None]
-                )
-                weight_acc[ty1:ty2, tx1:tx2] += win
-                tile_count += 1
-        if tile_count > 0:
-            blend_mask = weight_acc > 0
-            for c in range(3):
-                result[:, :, c] = np.where(
-                    blend_mask,
-                    (color_acc[:, :, c] / np.maximum(weight_acc, 1e-6)).clip(0, 255),
-                    frame[:, :, c],
-                )
-            result = result.astype(np.uint8)
-        return result
+    def _inpaint_pytorch_one(self, tile_frame: np.ndarray,
+                             tile_mask: np.ndarray) -> np.ndarray:
+        from PIL import Image
+        tile_rgb = cv2.cvtColor(tile_frame, cv2.COLOR_BGR2RGB)
+        pil_out = self._lama(Image.fromarray(tile_rgb),
+                             Image.fromarray(tile_mask))
+        tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
+        tile_h, tile_w = tile_frame.shape[:2]
+        tile_out = tile_out[:tile_h, :tile_w]
+        if tile_out.shape[:2] != (tile_h, tile_w):
+            raise ValueError(
+                "LaMa tile output is smaller than the source tile"
+            )
+        return tile_out
 
     def _inpaint_lama_tiled(self, frame: np.ndarray, mask: np.ndarray,
                             tile_size: int, overlap: int) -> np.ndarray:

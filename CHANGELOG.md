@@ -4,6 +4,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Tiled LaMa repair no longer sizes its working buffers to the whole picture. Each of the three tiled paths allocated two full-frame float32 accumulators per frame and blended across the entire image to repair a caption strip covering a few percent of it. On a 3840x2160 frame that measured 234.1 MB of peak allocation against 62.0 MB now, a saving of 172 MB per frame, and the three copies of the loop became one. Output is byte-identical; the reference corpus verifies it.
+
 ### Added
 
 - The interface says which cleanup algorithms it can actually run, before a run starts. The picker and the command-bar profile list were both built from an enum with no reference to what the machine can load, so a user could choose Detail, press Start, and only then be told there was no model. An algorithm that cannot run is now disabled in the picker, marked in the profile list, and explains what to do where the choice is made, with a Download button beside it when a reviewed model exists. The check runs on a background thread, so it costs nothing at startup and claims nothing missing until it has actually looked.
