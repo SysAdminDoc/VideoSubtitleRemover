@@ -69,7 +69,10 @@ from backend.region_keyframes import (
     region_shapes_at,
     shape_bounds,
 )
-from backend.a11y import set_accessible_metadata
+from backend.a11y import (
+    set_accessible_metadata,
+    set_accessible_subtree_visible,
+)
 from gui.direction import (
     install_direction_mirror,
     uninstall_direction_mirror,
@@ -883,6 +886,22 @@ class VideoSubtitleRemoverApp(
                 },
             }
 
+        # RM-356: already on the probe thread, and this shells nvidia-smi.
+        try:
+            from backend.device_provider import cpu_build_on_nvidia_hardware
+
+            # The GUI config carries use_gpu, not a device string, so the
+            # intent has to be spelled here. Someone who picked CPU mode is
+            # not asking to be told about a GPU download.
+            wants_gpu = bool(getattr(
+                getattr(self, "config", None), "use_gpu", True))
+            gpu_lane_notice = cpu_build_on_nvidia_hardware(
+                requested_device="cuda:0" if wants_gpu else "cpu",
+            )
+        except Exception:
+            logger.warning("CPU-build GPU notice probe failed", exc_info=True)
+            gpu_lane_notice = None
+
         dispatch_to_ui(
             self.root,
             self._apply_startup_hardware_probe,
@@ -892,6 +911,7 @@ class VideoSubtitleRemoverApp(
             backend_status,
             ffmpeg_profiles,
             ffmpeg_state,
+            gpu_lane_notice,
         )
 
     def _apply_startup_hardware_probe(
@@ -902,6 +922,7 @@ class VideoSubtitleRemoverApp(
         backend_status=None,
         ffmpeg_profiles=None,
         ffmpeg_state=None,
+        gpu_lane_notice=None,
     ):
         """Apply background probe results on the Tk main thread."""
         if self._shutdown_started:
@@ -924,12 +945,22 @@ class VideoSubtitleRemoverApp(
         self._refresh_ffmpeg_warning()
         self._refresh_action_states()
 
+        self._cpu_build_gpu_notice = gpu_lane_notice or None
+        self._refresh_cpu_build_gpu_notice()
+
         gpu_label = self.gpus[0]["name"] if self.gpus else tr("CPU mode")
         summary = ffmpeg_status_summary(self.ffmpeg_state)
-        self._update_status(
-            tr("Hardware detected: {gpu}; {audio}").format(
-                gpu=gpu_label, audio=summary["status"]),
-            "info" if summary["safe"] else "warning")
+        if gpu_lane_notice:
+            self._update_status(
+                tr("{gpu} found, but this build runs on the CPU. The NVIDIA "
+                   "download uses it.").format(
+                       gpu=gpu_lane_notice.get("adapter", "")),
+                "warning")
+        else:
+            self._update_status(
+                tr("Hardware detected: {gpu}; {audio}").format(
+                    gpu=gpu_label, audio=summary["status"]),
+                "info" if summary["safe"] else "warning")
         logger.info(
             "Startup hardware probe complete: gpus=%s detection=%s inpainting=%s ffmpeg=%s",
             len(self.gpus),
@@ -3201,6 +3232,33 @@ class VideoSubtitleRemoverApp(
                         before=divider)
         else:
             banner.pack(fill="x", padx=0, pady=(0, Theme.S_SM))
+
+    def _refresh_cpu_build_gpu_notice(self):
+        """Show or hide the CPU-build-on-NVIDIA-hardware notice. RM-356."""
+        row = getattr(self, "cpu_build_gpu_row", None)
+        label = getattr(self, "cpu_build_gpu_label", None)
+        button = getattr(self, "cpu_build_gpu_btn", None)
+        if row is None or label is None:
+            return
+        notice = getattr(self, "_cpu_build_gpu_notice", None)
+        if not notice:
+            row.pack_forget()
+            set_accessible_subtree_visible(row, False)
+            return
+        label.config(text=tr(
+            "{gpu} is installed, but this build runs on the CPU. The NVIDIA "
+            "download uses the card.").format(
+                gpu=notice.get("adapter", "")))
+        if button is not None:
+            button.pack(anchor="w", pady=(Theme.S_XS, 0))
+        row.pack(anchor="w", fill="x", pady=(Theme.S_XS, 0))
+        set_accessible_subtree_visible(row, True)
+
+    def _open_releases_page(self):
+        """Open the releases page, where the NVIDIA download is listed."""
+        notice = getattr(self, "_cpu_build_gpu_notice", None) or {}
+        self._update_release_url = notice.get("releasesUrl", "")
+        self._open_update_release_page()
 
     def _open_update_release_page(self):
         """Open the release page in the default browser. Never installs."""

@@ -648,6 +648,23 @@ class LayoutBuildMixin:
         self.gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
         self._refresh_gpu_selector()
 
+        # RM-356: an NVIDIA card the build cannot use belongs beside the
+        # device picker, not in a log line after twenty minutes of CPU run.
+        self.cpu_build_gpu_row = tk.Frame(row2, bg=Theme.BG_CARD)
+        self.cpu_build_gpu_label = tk.Label(
+            self.cpu_build_gpu_row, text="", font=f(Theme.F_META),
+            bg=Theme.BG_CARD, fg=Theme.WARNING, wraplength=280,
+            justify="left", anchor="w",
+        )
+        self.cpu_build_gpu_label.pack(anchor="w", fill="x")
+        self.cpu_build_gpu_btn = ModernButton(
+            self.cpu_build_gpu_row, text=tr("Get the NVIDIA build"), width=176,
+            command=self._open_releases_page, style="ghost", size="sm",
+        )
+        Tooltip(self.cpu_build_gpu_btn, tr(
+            "Open the releases page, where the NVIDIA download is listed."))
+        self._refresh_cpu_build_gpu_notice()
+
         lang_row = tk.Frame(profile_details, bg=Theme.BG_CARD)
         lang_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 

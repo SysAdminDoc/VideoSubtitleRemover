@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from backend.execution_provenance import (
     FAILURE_DEPENDENCY_MISSING,
@@ -250,6 +250,62 @@ def tensorrtrtx_status() -> dict:
         "version": version,
         "provider": TENSORRT_RTX_PROVIDER,
         "providers": provider_names,
+    }
+
+
+RELEASES_URL = "https://github.com/SysAdminDoc/VideoSubtitleRemover/releases"
+
+
+def cpu_build_on_nvidia_hardware(
+    *,
+    requested_device: str = "",
+    env: Optional[Mapping[str, str]] = None,
+    gpu_probe: Optional[Callable[[], dict]] = None,
+    cuda_probe: Callable[[int], bool] = _cuda_available,
+    profile_probe: Optional[Callable[[], dict]] = None,
+) -> Optional[dict]:
+    """Report a machine that has an NVIDIA card and a build that cannot use it.
+
+    RM-356: the product already knew both halves of this and said neither
+    where anyone would look. `gui/utils.detect_gpu` and this module's own
+    fallback warning meant a user on the CPU download could watch a twenty
+    minute run go by on the CPU with an idle 4070 in the machine, which is
+    what issue #10 reports.
+
+    Returns None when there is nothing to say: no NVIDIA adapter, a CUDA
+    provider that does load, a build already on the NVIDIA lane, or a user who
+    asked for the CPU on purpose.
+    """
+    requested = str(requested_device or "").strip().lower()
+    if requested == "cpu":
+        return None
+
+    if profile_probe is None:
+        from backend.build_profile import resolve_build_profile
+
+        def profile_probe() -> dict:
+            return resolve_build_profile(env=env)
+    profile = str((profile_probe() or {}).get("profile") or "").lower()
+    if profile == "nvidia":
+        return None
+
+    if cuda_probe(0):
+        return None
+
+    if gpu_probe is None:
+        from backend.provider_benchmark import gpu_host_facts
+
+        gpu_probe = gpu_host_facts
+    facts = gpu_probe() or {}
+    if not facts.get("present"):
+        return None
+
+    return {
+        "adapter": str(facts.get("name") or "NVIDIA GPU"),
+        "driver": str(facts.get("driver") or ""),
+        "profile": profile or "cpu",
+        "releasesUrl": RELEASES_URL,
+        "assetPrefix": "VideoSubtitleRemoverPro-<version>-nvidia",
     }
 
 

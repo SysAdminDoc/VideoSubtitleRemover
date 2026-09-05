@@ -2213,6 +2213,23 @@ def _run_processing(
     if config.preserve_audio and not ffmpeg_ready:
         print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
 
+    # RM-356: this build knows there is an NVIDIA card and knows it cannot use
+    # it, and used to put both facts in the log as a warning nobody reads.
+    from backend.device_provider import cpu_build_on_nvidia_hardware
+
+    # args.gpu is what the user asked for. config.device is already past the
+    # fallback, so "cpu" there cannot tell a deliberate CPU run from one that
+    # dropped to the CPU, which is the whole case this notice exists for.
+    gpu_notice = cpu_build_on_nvidia_hardware(
+        requested_device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
+    )
+    if gpu_notice:
+        print(
+            f"[note] {gpu_notice['adapter']} is present but this build runs "
+            f"on the CPU. The {gpu_notice['assetPrefix']} download uses it: "
+            f"{gpu_notice['releasesUrl']}"
+        )
+
     ckpt_dir = (
         Path(args.checkpoint_dir)
         if args.checkpoint_dir
