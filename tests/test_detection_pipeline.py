@@ -33,6 +33,94 @@ def _fresh_detection_module():
             sys.modules.pop("cv2", None)
 
 
+class RetiredEngineTests(unittest.TestCase):
+    """RM-332: a retired engine must say so, not silently become another."""
+
+    def test_the_retired_name_is_refused_with_a_reason(self):
+        from backend.detection import normalize_ocr_engine
+
+        with self.assertRaises(ValueError) as caught:
+            normalize_ocr_engine("easyocr", strict=True)
+        message = str(caught.exception)
+        self.assertIn("retired", message)
+        self.assertIn("2024-09-24", message)
+        self.assertIn("rapidocr", message)
+
+    def test_its_alias_is_refused_too(self):
+        from backend.detection import normalize_ocr_engine
+
+        with self.assertRaises(ValueError):
+            normalize_ocr_engine("easy", strict=True)
+
+    def test_a_non_strict_caller_does_not_get_a_silent_substitution(self):
+        from backend.detection import normalize_ocr_engine
+
+        # Non-strict callers fall back to "auto" for an unknown name. A
+        # retired name is different: it was a real choice a user made, so it
+        # raises in both modes rather than quietly becoming Auto.
+        with self.assertRaises(ValueError):
+            normalize_ocr_engine("easyocr")
+
+    def test_it_is_gone_from_the_selectable_list(self):
+        from backend.detection import OCR_ENGINE_CHOICES
+
+        self.assertNotIn("easyocr", OCR_ENGINE_CHOICES)
+        self.assertIn("rapidocr", OCR_ENGINE_CHOICES)
+
+    def test_the_backend_config_validator_refuses_it(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        config = ProcessingConfig()
+        config.detection_engine = "easyocr"
+        with self.assertRaises(ValueError) as caught:
+            normalize_processing_config(config)
+        self.assertIn("easyocr", str(caught.exception))
+
+    def test_a_saved_gui_setting_says_what_happened(self):
+        import gui.config as gui_config
+
+        gui_config.consume_settings_load_notice()
+        config = gui_config.ProcessingConfig()
+        config.detection_engine = "easyocr"
+        config.normalized()
+        self.assertEqual(config.detection_engine, "auto")
+        notice = gui_config.consume_settings_load_notice()
+        self.assertIsNotNone(
+            notice, "resetting the user's chosen engine in silence is the "
+            "substitution this item exists to stop")
+        self.assertIn("retired", notice)
+
+    def test_an_unknown_engine_still_coerces_without_a_notice(self):
+        import gui.config as gui_config
+
+        gui_config.consume_settings_load_notice()
+        config = gui_config.ProcessingConfig()
+        config.detection_engine = "from-a-newer-build"
+        config.normalized()
+        self.assertEqual(config.detection_engine, "auto")
+        self.assertIsNone(
+            gui_config.consume_settings_load_notice(),
+            "a settings file from a newer build must not stop this one "
+            "starting, and it is not a retirement",
+        )
+
+    def test_the_constraint_and_vendored_hash_are_gone(self):
+        import json
+        from pathlib import Path as _Path
+
+        root = _Path(__file__).resolve().parents[1]
+        data = json.loads(
+            (root / "dependency_profiles.json").read_text(encoding="utf-8"))
+        self.assertFalse(
+            [c for c in data["commonConstraints"] if c.startswith("easyocr")])
+        self.assertNotIn("easyocr==1.7.2", data["reviewedArtifactHashes"])
+        self.assertTrue(
+            any("EasyOCR detector is retired" in note
+                for note in data["intentionalExceptions"]),
+            "the manifest has to record the removal and the date behind it",
+        )
+
+
 class DetectionCascadeTests(unittest.TestCase):
     def _vlm_disabled_module(self):
         module = types.ModuleType("backend.ocr_vlm")
@@ -57,7 +145,7 @@ class DetectionCascadeTests(unittest.TestCase):
             return real_import(name, globals, locals, fromlist, level)
 
         def fake_can_import(name, **kwargs):
-            return name in {"rapidocr", "easyocr"}
+            return name in {"rapidocr"}
 
         with _fresh_detection_module() as detection:
             with mock.patch.dict(
@@ -74,15 +162,18 @@ class DetectionCascadeTests(unittest.TestCase):
                             detector = detection.SubtitleDetector(device="cpu", lang="en")
 
         self.assertEqual(detector._engine_name, "OpenCV fallback")
+        # RM-332 retired EasyOCR, which used to sit between Surya and the
+        # OpenCV fallback. This asserts the shipped cascade, so it moves with
+        # it; the engine is gone rather than reordered.
         self.assertEqual(
             attempts,
             [
                 "rapidocr",
                 "backend.paddle_compat",
                 "surya.detection",
-                "easyocr",
             ],
         )
+        self.assertNotIn("easyocr", attempts)
 
     def test_rapidocr_wins_before_later_engines(self):
         class FakeRapidOCR:

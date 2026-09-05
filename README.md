@@ -81,7 +81,7 @@ Track selection says exactly what will be removed. Region and mask tools keep th
 - **Real Video Inpainting:** Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
 - **Real AI Inpainting:** LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing:** Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
-- **Multi-Engine Detection:** RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
+- **Multi-Engine Detection:** RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > threshold fallback (automatic)
 - **Truthful Named Stages:** Named OCR, inpainting, segmentation, tracking, and restoration requests stop with a classified error when the selected implementation cannot prove valid work. Missing visibility, malformed arrays, unchanged masks or pixels, and byte-identical restoration files are rejected before reports record success. Auto alone may try another implementation
 - **Polygon-Aware OCR Masks:** OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
 - **Stable SRT Export:** SRT sidecars reuse the text and confidence already attached to OCR tracks. Conservative Unicode-aware consensus absorbs low-confidence character jitter, keeps real caption changes separate, and writes the source frame clock without a second full-frame OCR pass
@@ -101,7 +101,7 @@ Track selection says exactly what will be removed. Region and mask tools keep th
 - **Inpaint Preview:** "Test cleanup" uses the selected video timestamp for single-frame modes and a scene-bounded before/current/after source window for temporal modes. The result reports its timestamp, frame range, and low-resolution planning proxy while inpainting the full-resolution source frame
 - **Cached Mask Tuning:** Adjust mask dilation in the preview pane and see the composed result immediately without rerunning OCR
 - **Clean Boundaries:** Gaussian alpha feathering at every inpaint boundary, with no visible cut lines
-- **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
+- **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, and Surya 90+ (GPL opt-in); gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
 - **GPU Acceleration:** NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes and adds OCR detections during processing, mask review, and cleanup previews
 - **Live Region OCR Feedback:** While drawing a rectangle, inspect detected text boxes and confidence before saving the region
@@ -248,8 +248,8 @@ only after the same runtime verifier used by the launchers succeeds.
 Maintainers update `dependency_profiles.json`, run
 `python -m backend.dependency_profiles update`, review the emitted diffs, and
 then run `python -m backend.dependency_profiles check`. Generated constraint
-and manifest SHA-256 values are included in release evidence. PaddleOCR,
-EasyOCR (frozen at 1.7.2; last release 2024-09-24) and legacy
+and manifest SHA-256 values are included in release evidence. PaddleOCR
+and legacy
 `simple-lama-inpainting` (frozen at 0.1.2; last release 2023-07-28) remain
 isolated opt-ins because their OpenCV wheel ownership or NumPy caps conflict
 with the primary runtime. Prefer RapidOCR for maintained OCR and LaMa ONNX or
@@ -343,7 +343,7 @@ audits the exact frozen Python components with `pip-audit`, and applies strict
 runtime/advisory gates. It exits nonzero at the first failed stage.
 
 The default frozen profile packages RapidOCR/ONNX and excludes the
-multi-gigabyte PaddleOCR, EasyOCR, and PyTorch fallbacks. Set
+multi-gigabyte PaddleOCR and PyTorch fallbacks. Set
 `VSR_ENABLE_FULL_OCR=1` and/or `VSR_ENABLE_PYTORCH_LAMA=1` before the build to
 include those optional runtimes intentionally. `sbom.cdx.json` is derived from
 PyInstaller's `Analysis-00.toc`: required Python libraries and hashed native
@@ -466,18 +466,18 @@ that run.
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
-can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in), EasyOCR
+can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in)
 (frozen; last release 2024-09-24), any of the four vision-language tiers, or
 the dependency-free OpenCV detector for comparison and reproducible runs.
 If a pinned engine can't load or execute, processing stops with a classified
 reason and repair instructions. Only Auto can continue with another OCR
 implementation. The same selector is available as `--ocr-engine` on the
-CLI, which accepts `auto`, `rapidocr`, `opencv-dnn`, `paddleocr`, `easyocr`,
+CLI, which accepts `auto`, `rapidocr`, `opencv-dnn`, `paddleocr`,
 `opencv`, `surya`, `vlm-florence2`, `vlm-qwen25vl`, `vlm-paddleocr-vl`, and
 `vlm-paddleocr-vl-llama`.
 
 Advanced > Detection also offers **Only remove the selected language**. It is
-opt-in and requires recognized text from RapidOCR, PaddleOCR, or EasyOCR;
+opt-in and requires recognized text from RapidOCR or PaddleOCR;
 detection-only boxes are kept. Matching is by script family, so it can separate
 Japanese/Cyrillic/Arabic/etc. overlays from Latin text, while Latin-script
 languages such as English and French intentionally share one family.
@@ -493,8 +493,7 @@ track plans remain valid.
 | 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino==2026.2.1" --constraint dependency_profiles/directml.txt` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
 | 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.7.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | Explicit PP-OCRv5 mobile (default, smaller/faster) or server models, or a PP-OCRv6 tier (`tiny`, `small`, `medium`) via `--paddleocr-variant`; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
-| 4 | EasyOCR (frozen) | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Frozen legacy fallback; last release 2024-09-24; installs its own OpenCV wheel |
-| 5 | OpenCV fallback | Built-in | Any | Threshold-based |
+| 4 | OpenCV fallback | Built-in | Any | Threshold-based |
 
 The vision-language tiers stay default-off and are picked the same way as
 every other engine: choose one in Advanced > Detection or pass
@@ -688,7 +687,6 @@ opt-in or optional-engine selection:
 | Optional path | What enables it | Download owner and cache |
 |---|---|---|
 | PaddleOCR | PaddleOCR is selected and its assets are absent | PaddleOCR manages its model URLs and user cache |
-| EasyOCR | EasyOCR is selected and its assets are absent | EasyOCR manages its model URLs and user model cache |
 | Surya | Surya is installed and `VSR_ALLOW_GPL=1` | Surya manages its Hugging Face models and cache |
 | Florence-2 | `VSR_VLM_OCR=florence2` with `VSR_FLORENCE2_REVISION` | Hugging Face; a full commit is required because repository code executes |
 | Qwen2.5-VL | `VSR_VLM_OCR=qwen25vl` with `VSR_QWEN25VL_REVISION` | Hugging Face; a pinned revision is required |
@@ -1178,7 +1176,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--self-test` | Probe OCR engines, inpaint backends, GPU providers, and codecs, then print results and exit. | Off | - | Public |
 | `--inference-smoke` | Run a generated text image and masked frame through the OCR and inpaint backends to prove they actually execute (records provider/timing), then exit. No model downloads. Uses --gpu to pick the device. | Off | - | Public |
 | `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
-| `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. surya needs the GPL opt-in (VSR_ALLOW_GPL=1); vlm-* engines need their optional dependencies installed; a pinned engine fails with repair guidance when it cannot run. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv \| surya \| vlm-florence2 \| vlm-qwen25vl \| vlm-paddleocr-vl \| vlm-paddleocr-vl-llama | Public |
+| `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. surya needs the GPL opt-in (VSR_ALLOW_GPL=1); vlm-* engines need their optional dependencies installed; a pinned engine fails with repair guidance when it cannot run. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| opencv \| surya \| vlm-florence2 \| vlm-qwen25vl \| vlm-paddleocr-vl \| vlm-paddleocr-vl-llama | Public |
 | `--rapidocr-variant` | Select RapidOCR PP-OCR generation (v6 default, v5 fallback). | v6 | v6 \| v5 | Public |
 | `--paddleocr-variant` | Select PaddleOCR models: PP-OCRv5 mobile (default, smaller/faster) or server, or a PP-OCRv6 tier (tiny/small/medium) from paddleocr 3.7.0. | mobile | mobile \| server \| tiny \| small \| medium | Public |
 | `--ocr-compare-variants` | Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures. | Off | - | Public |
@@ -1712,7 +1710,6 @@ every text scale and compares the direction census against the LTR baseline.
 
 - Original project: [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover)
 - LaMa inpainting: [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainting)
-- EasyOCR: [JaidedAI/EasyOCR](https://github.com/JaidedAI/EasyOCR)
 - STTN: [Learning Joint Spatial-Temporal Transformations](https://arxiv.org/abs/2007.10247)
 - ProPainter (research reference): [sczhou/ProPainter](https://github.com/sczhou/ProPainter). VSR's "ProPainter" mode is a TBE + LaMa hybrid inspired by the concept; it does not use the upstream ProPainter code or weights
 

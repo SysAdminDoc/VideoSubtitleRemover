@@ -1124,7 +1124,7 @@ def _build_parser(mode_choices):
     parser.add_argument(
         "--ocr-engine",
         choices=(
-            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr",
+            "auto", "rapidocr", "opencv-dnn", "paddleocr",
             "opencv", "surya", "vlm-florence2", "vlm-qwen25vl",
             "vlm-paddleocr-vl", "vlm-paddleocr-vl-llama",
         ),

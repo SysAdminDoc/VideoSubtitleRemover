@@ -11,7 +11,6 @@
     "idna==3.15",
     "rapidocr==3.9.2",
     "paddleocr==3.7.0",
-    "easyocr==1.7.2",
     "simple-lama-inpainting==0.1.2"
   ],
   "commonRequiredPackages": [
@@ -95,11 +94,11 @@
     }
   },
   "reviewedArtifactHashes": {
-    "easyocr==1.7.2": "5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c",
     "paddleocr==3.7.0": "c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338",
     "rapidocr==3.9.2": "04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0"
   },
   "intentionalExceptions": [
+    "2026-09-05: the EasyOCR detector is retired and its constraint and vendored sdist hash are removed. PyPI shows no release after 1.7.2 on 2024-09-24, it was the slowest and largest engine in the cascade, and RapidOCR, PaddleOCR and the OpenCV 5 DNN detector cover the same work. A config or preset that names it now fails with that sentence rather than silently selecting a different engine.",
     "2026-08-27: the NVIDIA profile moves to the CUDA 13 channel: torch==2.13.0+cu130, torchvision==0.28.0+cu130, and onnxruntime-gpu==1.29.0. Which CUDA the default PyPI onnxruntime-gpu wheel targets is still absent from wheel metadata, so it was determined by running it: 1.29.0 loads cublasLt64_13.dll and fails to create CUDAExecutionProvider without a CUDA 13 runtime, which makes the default wheel the CUDA 13 build. Verified on an RTX 4070 SUPER (driver 610.88) with torch 2.13.0+cu130 supplying that runtime: InferenceSession(providers=['CUDAExecutionProvider']) really ran on CUDAExecutionProvider. The move closes GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1) and leaves the cu128 lane, which cannot reach a fixed torch because cu128 Windows wheels stop at 2.11.0. Superseded 2026-09-05: see the torch 2.14.0 entry below.",
     "Python 3.10 is no longer a supported setup target because the security-reviewed ONNX Runtime 1.25+ CPU/CUDA line and the pinned DirectML 1.24.4 line do not publish CPython 3.10 wheels; Python 3.11 is the minimum reproducible runtime.",
     "2026-08-12: NumPy is pinned to 2.4.6, the newest 2.4.x release that supports Python 3.11; NumPy 2.5.x starts at Python 3.12, so the >=3.11 project floor is intentionally retained until a coordinated Python-floor review.",

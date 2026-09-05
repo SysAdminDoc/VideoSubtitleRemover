@@ -4,6 +4,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- The EasyOCR detector is retired. It had no release after 1.7.2 on 2024-09-24, it was the slowest and largest engine in the cascade, and RapidOCR, PaddleOCR and the OpenCV 5 DNN detector cover the same work while it held a constraint line and a vendored hash in every dependency profile. Automatic detection now goes from Surya straight to the OpenCV fallback. A saved setting or preset that names it is not silently switched to something else: the command line refuses it with the reason, and the interface resets to Automatic and says why.
+
 ### Fixed
 
 - The installed application can open the deep media paths a source run already could. It shipped without an application manifest, so it never declared long-path awareness, while CPython declares it in `python.exe` and a developer running from source got it for free. Windows reads that value once per process on first use, so it cannot be set at runtime; the frozen build now carries a manifest that declares it, and release verification reads the manifest back out of the built executable rather than trusting the build to have embedded it.

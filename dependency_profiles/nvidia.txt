@@ -3,10 +3,9 @@
 # Profile: nvidia
 # Provider: CUDAExecutionProvider
 # Reviewed: 2026-09-05
-# Manifest-SHA256: dbda0cc3994442dbae90d6df1e9114ef2b57d46ac380f044289bd1b19202408e
+# Manifest-SHA256: c69077949371b0ba092b0d2e8420e49403e946a853f66d7952425961f2a1f40a
 #
 # Universal artifacts reviewed with a stable SHA-256:
-#   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
 #   paddleocr==3.7.0 sha256=c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338
 #   rapidocr==3.9.2 sha256=04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0
 
@@ -19,7 +18,6 @@ Pillow==12.3.0
 idna==3.15
 rapidocr==3.9.2
 paddleocr==3.7.0
-easyocr==1.7.2
 simple-lama-inpainting==0.1.2
 onnxruntime-gpu==1.29.0
 torch==2.14.0

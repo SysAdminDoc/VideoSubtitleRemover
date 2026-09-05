@@ -670,10 +670,22 @@ class ProcessingConfig:
         self.detection_engine = _coerce_text(
             self.detection_engine, "auto", 24).lower()
         if self.detection_engine not in {
-            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr",
+            "auto", "rapidocr", "opencv-dnn", "paddleocr",
             "opencv", "surya", "vlm-florence2", "vlm-qwen25vl",
             "vlm-paddleocr-vl", "vlm-paddleocr-vl-llama",
         }:
+            # RM-332: an unknown engine still coerces, because a settings file
+            # from a newer build must not stop this one starting. A retired
+            # engine is different: the user chose it, so say what happened
+            # instead of resetting in silence.
+            from backend.detection import RETIRED_OCR_ENGINES
+
+            retired = RETIRED_OCR_ENGINES.get(self.detection_engine)
+            if retired:
+                _set_settings_load_notice(
+                    f"The {self.detection_engine} detector was retired: "
+                    f"{retired} Detection is set to Automatic."
+                )
             self.detection_engine = "auto"
         self.rapidocr_variant = _coerce_text(
             self.rapidocr_variant, "v6", 16).lower()

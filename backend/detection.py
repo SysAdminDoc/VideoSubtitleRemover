@@ -1,5 +1,5 @@
 """Subtitle detector cascade (VLM > RapidOCR > PaddleOCR > Surya >
-EasyOCR frozen fallback > OpenCV fallback).
+OpenCV fallback).
 
 Extracted from processor.py as part of RFP-L-1. Every engine in the
 cascade is a first-class choice in Advanced > Detection and through
@@ -45,7 +45,6 @@ OCR_ENGINE_CHOICES = (
     "rapidocr",
     "opencv-dnn",
     "paddleocr",
-    "easyocr",
     "opencv",
     "surya",
     "vlm-florence2",
@@ -101,6 +100,20 @@ def _classify_ocr_runtime(method):
     return wrapped
 
 
+# RM-332: EasyOCR had no release after 1.7.2 on 2024-09-24, was the slowest
+# and largest engine in the cascade, and held a constraint line in every
+# dependency profile for a fallback RapidOCR, PaddleOCR and the OpenCV DNN
+# path already cover. Retiring it is not the same as forgetting it: a config
+# that names it fails with this sentence rather than silently running
+# something else.
+RETIRED_OCR_ENGINES = {
+    "easyocr": (
+        "it had no release after 1.7.2 (2024-09-24) and RapidOCR, PaddleOCR "
+        "and the OpenCV DNN detector cover the same work."
+    ),
+}
+
+
 def normalize_ocr_engine(value: object, *, strict: bool = False) -> str:
     """Return a supported detector selector.
 
@@ -118,6 +131,14 @@ def normalize_ocr_engine(value: object, *, strict: bool = False) -> str:
     normalized = aliases.get(normalized, normalized)
     if normalized in OCR_ENGINE_CHOICES:
         return normalized
+    if normalized in RETIRED_OCR_ENGINES:
+        # RM-332: a saved config or preset naming this must say so rather
+        # than quietly becoming a different engine.
+        raise ValueError(
+            f"The {normalized} detector was retired in 3.42.0: "
+            f"{RETIRED_OCR_ENGINES[normalized]} Choose one of: "
+            + ", ".join(OCR_ENGINE_CHOICES)
+        )
     if strict:
         choices = ", ".join(OCR_ENGINE_CHOICES)
         raise ValueError(
@@ -448,7 +469,6 @@ class SubtitleDetector:
         self._paddle_model_variant = ""
         self._surya_det = None
         self._surya_processor = None
-        self._easyocr_reader = None
         self._vlm_detector = None
         # RM-147: what ran, not just what was asked for.
         self._provider_name = ""
@@ -484,7 +504,6 @@ class SubtitleDetector:
                 "Install the selected PaddleOCR profile and model family, "
                 "or select Auto."
             ),
-            "easyocr": "Install EasyOCR and its language models, or select Auto.",
             "surya": (
                 "Set VSR_ALLOW_GPL=1 after reviewing the license and install "
                 "Surya, or select Auto."
@@ -611,7 +630,6 @@ class SubtitleDetector:
         self._rapid_model = None
         self._paddle_model = None
         self._surya_det = None
-        self._easyocr_reader = None
         self._engine_name = "OpenCV fallback"
         self._provider_name = "cv2"
         self._effective_device = "cpu"
@@ -630,11 +648,11 @@ class SubtitleDetector:
         )
 
         if not self._provider_name:
-            # Every remaining path (PaddleOCR CPU build, Surya, EasyOCR,
+            # Every remaining path (PaddleOCR CPU build, Surya,
             # OpenCV fallback) is CPU unless it announced a GPU provider.
             self._provider_name = (
                 "cuda" if self._is_gpu_device()
-                and self._engine_name in {"PaddleOCR", "Surya", "EasyOCR"}
+                and self._engine_name in {"PaddleOCR", "Surya"}
                 else "cpu"
             )
         effective = device_from_provider(self._provider_name)
@@ -690,7 +708,7 @@ class SubtitleDetector:
 
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
-        EasyOCR (frozen; last release 2024-09-24) > OpenCV fallback."""
+        OpenCV fallback."""
         self.engine = normalize_ocr_engine(
             getattr(self, "engine", "auto"), strict=True
         )
@@ -964,74 +982,15 @@ class SubtitleDetector:
             except Exception:
                 pass
 
-        # EasyOCR
-        if self.engine not in {"auto", "easyocr"}:
+        # RM-332: EasyOCR used to sit here as the last engine before the
+        # OpenCV fallback. Auto now goes straight to OpenCV; a request for a
+        # named engine that got this far never reached an implementation.
+        if self.engine != "auto":
             self._fail_requested(
                 self.engine,
                 FAILURE_INITIALIZATION,
                 "the requested engine reached no usable implementation",
             )
-        if not _module_can_import("easyocr"):
-            self._fail_requested(
-                "easyocr",
-                FAILURE_DEPENDENCY_MISSING,
-                "EasyOCR is unavailable or failed its import probe",
-            )
-            self._engine_name = "OpenCV fallback"
-            self._provider_name = "cv2"
-            self._provenance_reason = (
-                "Auto exhausted configured OCR implementations and selected OpenCV"
-            )
-            self._select_implementation("opencv", "cv2")
-            return
-        easy_failure: object = "EasyOCR returned no implementation"
-        try:
-            import easyocr
-            gpu = self._is_gpu_device()
-            from backend.language_support import normalize_language_code
-
-            easyocr_lang_map = {
-                "ch": "ch_sim", "chinese_cht": "ch_tra",
-                "ko": "ko", "ja": "ja", "en": "en",
-                "fr": "fr", "de": "de", "es": "es", "pt": "pt",
-                "ru": "ru", "ar": "ar", "hi": "hi", "it": "it",
-                "nl": "nl", "pl": "pl", "tr": "tr", "vi": "vi",
-                "th": "th", "uk": "uk", "sv": "sv", "no": "no",
-                "da": "da", "fi": "fi", "cs": "cs", "hu": "hu",
-                "ro": "ro", "id": "id", "ms": "ms",
-            }
-            # Normalize first: the picker's long-form codes ("japan") are not
-            # EasyOCR codes, and handing one to Reader() raised, dropping the
-            # user to OpenCV thresholding with only a log line.
-            primary = normalize_language_code(self.lang) or self.lang
-            mapped_lang = easyocr_lang_map.get(
-                self.lang, easyocr_lang_map.get(primary, primary))
-            lang_list = [mapped_lang]
-            if mapped_lang != "en":
-                lang_list.append("en")
-            self._easyocr_reader = easyocr.Reader(lang_list, gpu=gpu, verbose=False)
-            self._engine_name = "EasyOCR"
-            self._provider_name = "cuda" if gpu else "cpu"
-            self._select_implementation("easyocr", self._provider_name)
-            logger.info(f"EasyOCR loaded (lang={lang_list})")
-            return
-        except ImportError as exc:
-            easy_failure = exc
-        except RequestedStageError:
-            raise
-        except Exception as e:
-            easy_failure = e
-            logger.warning(f"EasyOCR init failed: {e}")
-
-        self._fail_requested(
-            "easyocr",
-            (
-                FAILURE_DEPENDENCY_MISSING
-                if isinstance(easy_failure, ImportError)
-                else FAILURE_INITIALIZATION
-            ),
-            easy_failure,
-        )
 
         self._engine_name = "OpenCV fallback"
         self._provider_name = "cv2"
@@ -1245,24 +1204,6 @@ class SubtitleDetector:
                 logger.error(f"Surya confidence detection error: {exc}")
                 self._switch_auto_to_opencv("surya", exc)
                 return [(*box, 1.0) for box in self._fallback_detection(frame)]
-        if self._easyocr_reader is not None:
-            try:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                output = []
-                for bbox, _text, confidence in self._easyocr_reader.readtext(
-                    frame_rgb
-                ):
-                    confidence = float(confidence)
-                    if confidence < threshold:
-                        continue
-                    box = self._poly_to_box(bbox)
-                    if box is not None:
-                        output.append((*box, confidence))
-                return output
-            except Exception as exc:
-                logger.error(f"EasyOCR confidence detection error: {exc}")
-                self._switch_auto_to_opencv("easyocr", exc)
-                return [(*box, 1.0) for box in self._fallback_detection(frame)]
         boxes = self._detect_axis_aligned(frame, threshold)
         return [(x1, y1, x2, y2, 1.0) for (x1, y1, x2, y2) in boxes]
 
@@ -1289,24 +1230,6 @@ class SubtitleDetector:
             except Exception as exc:
                 logger.error(f"PaddleOCR text detection error: {exc}")
                 self._switch_auto_to_opencv("paddleocr", exc)
-                self._fallback_detection(frame)
-                return []
-        if self._easyocr_reader is not None:
-            try:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                output = []
-                for bbox, text, confidence in self._easyocr_reader.readtext(
-                    frame_rgb
-                ):
-                    if float(confidence) < threshold:
-                        continue
-                    box = self._poly_to_box(bbox)
-                    if box is not None:
-                        output.append(box + (float(confidence), str(text)))
-                return output
-            except Exception as exc:
-                logger.error(f"EasyOCR text detection error: {exc}")
-                self._switch_auto_to_opencv("easyocr", exc)
                 self._fallback_detection(frame)
                 return []
         elif self._surya_det is not None:
@@ -1445,8 +1368,6 @@ class SubtitleDetector:
             return self._detect_paddle(frame, threshold)
         elif self._surya_det is not None:
             return self._detect_surya(frame, threshold)
-        elif self._easyocr_reader is not None:
-            return self._detect_easyocr(frame, threshold)
         else:
             return self._fallback_detection(frame)
 
@@ -1484,8 +1405,6 @@ class SubtitleDetector:
             return self._detect_paddle_geometry(frame, threshold)
         if self._surya_det is not None:
             return self._detect_surya_geometry(frame, threshold)
-        if self._easyocr_reader is not None:
-            return self._detect_easyocr_geometry(frame, threshold)
         return [
             detection
             for box in self._fallback_detection(frame)
@@ -1821,53 +1740,6 @@ class SubtitleDetector:
         except Exception as exc:
             logger.error(f"Surya geometry detection error: {exc}")
             self._switch_auto_to_opencv("surya", exc)
-            return [
-                detection
-                for box in self._fallback_detection(frame)
-                for detection in [DetectionGeometry.from_box(box, frame.shape)]
-                if detection is not None
-            ]
-
-    def _detect_easyocr(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
-        try:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self._easyocr_reader.readtext(frame_rgb)
-            boxes = []
-            for (bbox, text, conf) in results:
-                if conf >= threshold:
-                    pts = np.array(bbox, dtype=np.int32)
-                    x1, y1 = pts.min(axis=0)
-                    x2, y2 = pts.max(axis=0)
-                    boxes.append((int(x1), int(y1), int(x2), int(y2)))
-            return boxes
-        except Exception as e:
-            logger.error(f"EasyOCR detection error: {e}")
-            self._switch_auto_to_opencv("easyocr", e)
-            return self._fallback_detection(frame)
-
-    def _detect_easyocr_geometry(
-        self, frame: np.ndarray, threshold: float
-    ) -> List[DetectionGeometry]:
-        try:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            output: List[DetectionGeometry] = []
-            for polygon, text, confidence in self._easyocr_reader.readtext(
-                frame_rgb):
-                confidence = float(confidence)
-                if confidence < threshold:
-                    continue
-                detection = DetectionGeometry.from_polygon(
-                    polygon,
-                    frame.shape,
-                    confidence=confidence,
-                    text=str(text),
-                )
-                if detection is not None:
-                    output.append(detection)
-            return output
-        except Exception as exc:
-            logger.error(f"EasyOCR geometry detection error: {exc}")
-            self._switch_auto_to_opencv("easyocr", exc)
             return [
                 detection
                 for box in self._fallback_detection(frame)
