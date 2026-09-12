@@ -153,7 +153,11 @@ class VideoSubtitleRemoverApp(
             self.root.withdraw()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
         self.root.geometry("980x720" if self._background_ui else "1440x900")
-        self.root.minsize(980, 720)
+        # RM-340: a fixed floor is wrong at 200 percent text, where the same
+        # content needs more room, and wrong again on a 1366x768 display,
+        # where a floor larger than the screen cannot be honoured. Scale it,
+        # then clamp to what the monitor can actually show.
+        self.root.minsize(*self._scaled_minimum_size(980, 720))
         self.root.configure(bg=Theme.BG_DARK)
         self._ui_resources_released = False
         # RM-314: main() acquires the interactive-instance slot before any
@@ -421,7 +425,17 @@ class VideoSubtitleRemoverApp(
         self._sync_config_from_ui()
         # Persist window layout and panel states for next launch
         try:
-            self.config.window_geometry = self.root.geometry()
+            self.config.window_maximized = (
+                str(self.root.state()) == "zoomed")
+            if self.config.window_maximized:
+                # geometry() reports the zoomed size, which would reopen a
+                # maximized window as a full-screen restored one. Keep the
+                # size it will return to.
+                self.config.window_geometry = (
+                    getattr(self, "_restored_geometry", "")
+                    or self.config.window_geometry)
+            else:
+                self.config.window_geometry = self.root.geometry()
             self.config.adv_panel_open = self.adv_visible
             self.config.log_panel_open = self._log_visible
         except Exception:
@@ -3313,6 +3327,46 @@ class VideoSubtitleRemoverApp(
             or x + 120 > bx + bw or y + 80 > by + bh
         )
 
+    def _track_restored_geometry(self, event=None) -> None:
+        """Keep the last non-maximized geometry. RM-340."""
+        del event
+        try:
+            if str(self.root.state()) != "zoomed":
+                self._restored_geometry = self.root.geometry()
+        except tk.TclError:
+            pass
+
+    def _scaled_minimum_size(self, base_w: int, base_h: int) -> tuple:
+        """Minimum window size for the active text scale, clamped to fit.
+
+        RM-340: a fixed floor ignores text_scale_percent, so a 200 percent
+        layout is squeezed below the size its own content needs. It is also
+        unhonourable on a small display: a floor wider than the monitor makes
+        the window unresizable past the screen edge. Scale, then clamp.
+        """
+        try:
+            from gui.theme import text_scale_percent
+
+            scale = max(100, int(text_scale_percent())) / 100.0
+        except Exception:
+            scale = 1.0
+        width = int(base_w * scale)
+        height = int(base_h * scale)
+        try:
+            from gui.utils import monitor_work_area
+
+            measured = monitor_work_area(self.root)
+            if measured is not None:
+                _x, _y, avail_w, avail_h = measured
+            else:
+                avail_w = int(self.root.winfo_screenwidth())
+                avail_h = int(self.root.winfo_screenheight())
+            width = min(width, max(640, avail_w - 16))
+            height = min(height, max(480, avail_h - 16))
+        except Exception:
+            pass
+        return (width, height)
+
     def run(self):
         """Run the application."""
         self.root.update_idletasks()
@@ -3350,6 +3404,18 @@ class VideoSubtitleRemoverApp(
             x = max(24, (screen_w // 2) - (width // 2))
             y = max(24, (screen_h // 2) - (height // 2))
             self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+        # RM-340: remember the restored size before zooming, so closing a
+        # maximized window persists the size it will return to rather than
+        # the zoomed one, and reopen maximized when it was closed that way.
+        self._restored_geometry = self.root.geometry()
+        self.root.bind("<Configure>", self._track_restored_geometry, add="+")
+        if self.config.window_maximized:
+            try:
+                self.root.state("zoomed")
+            except tk.TclError:
+                logger.debug("Could not restore the maximized state",
+                             exc_info=True)
 
         logger.info(f"{APP_NAME} v{APP_VERSION} started")
         logger.info(f"Log file: {LOG_FILE}")

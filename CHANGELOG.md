@@ -4,6 +4,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.42.0] - 2026-09-12
+
+### Changed
+
+- The README now leads with the result, a direct Windows download, and a current product screenshot instead of making a new visitor read through implementation detail first. Every published interface image was recaptured from this release with realistic demonstration footage. The exact source, subtitle file, generation brief, production marks, and earlier screen studies are preserved under `assets/concepts/2026-09-12-marketing/`.
+
+- Windows now opts into per-monitor DPI awareness before Tk creates a window. Minimum sizes follow the monitor's scale and available work area, a maximized session keeps its real restored geometry, and a saved window that no longer fits the current monitor is moved back into view.
+
+- Help and diagnostics now wraps complete runtime facts. Detection, inpainting, and model status no longer lose the middle of the message to an ellipsis when someone opens Help to diagnose a setup.
+
 ### Fixed
 
 - A model download says how far along it is. The only feedback for a first fetch was one toast and a queue row stuck at 2 percent, which reads as a hang on a large file. The interface and the command line now report the file name, bytes transferred, the total when the server gives one, and elapsed time, from one shared formatter so the two cannot drift into describing the same download differently. The advice to keep the window open is shown rather than written to the log.

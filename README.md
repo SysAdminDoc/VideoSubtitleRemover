@@ -6,67 +6,45 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.41.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.42.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
+[![GitHub stars](https://img.shields.io/github/stars/SysAdminDoc/VideoSubtitleRemover?color=60a5fa)](https://github.com/SysAdminDoc/VideoSubtitleRemover/stargazers)
 
-**Remove hard-coded subtitles locally with frame-aware cleanup and review tools**
+**Clean burned-in subtitles and visible text without cropping the shot.**
 
-[Features](#features) | [Installation](#installation) | [Usage](#usage) | [Configuration](#configuration) | [CLI](#cli-usage) | [Troubleshooting](#troubleshooting)
+Review the mask, keep the footage local, and render with the CPU or NVIDIA build that matches your machine.
+
+[Download the latest Windows build](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/latest) | [Quick start](#quick-install) | [See the workflow](#how-it-works) | [Troubleshooting](#troubleshooting)
 
 </div>
 
----
+![Video Subtitle Remover Pro showing a realistic subtitled video ready for cleanup](assets/screenshots/02-main-media.png)
 
-## Overview
+<p align="center"><sub>Actual v3.42.0 Windows interface. The demonstration clip is included in the repository.</sub></p>
 
-Video Subtitle Remover Pro finds hard-coded subtitles and text watermarks, then rebuilds the covered pixels from surrounding frames or local inpainting models. It preserves the full frame instead of hiding text with a blur or crop.
+## Why use VSR Pro?
 
-All media processing is local. No account, subscription, or upload is required:
-your video, images, masks, OCR text, and outputs stay on this computer. The
-default OCR and cleanup path does not fetch models at runtime. Optional engines
-can download model material after you enable them. Every such route is listed
-under [Optional model network paths](#optional-model-network-paths) and in the
-[privacy and network guide](docs/privacy-and-network.md).
+- It rebuilds pixels under text with temporal evidence and local inpainting. The frame isn't blurred, cropped, or covered with a patch.
+- Review comes first. Draw rectangles or polygons, inspect OCR tracks, and correct the mask before a long render begins.
+- Nothing needs an account. Default processing stays on the computer, and every optional network path is documented.
+- Choose a smaller CPU download or the full NVIDIA package. Each hardware lane is built and verified separately.
 
-The two non-model requests are an opt-in GitHub update check and
-an opt-in crash report. The `update_check` setting is `false` by default.
-Leave **Check for updates on startup** off to disable the update request. Crash
-reporting is disabled unless both `VSR_GLITCHTIP_DSN` and
-`VSR_CRASH_REPORTS=1` are set. Unset either variable, or set
-`VSR_CRASH_REPORTS=0`, to disable it.
+## How it works
 
-This project builds on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover). It adds a desktop review workflow, local LaMa inpainting, multiple detection engines, and a 52-code language picker backed by broader OCR engine coverage.
+1. **Add media.** Open one video, a group of files, or a folder.
+2. **Choose what to remove.** Use automatic detection, draw an exact region, or review the detected text tracks.
+3. **Test a frame.** Inspect the mask and a cleaned preview before processing the queue.
+4. **Start cleanup.** VSR preserves audio, writes the selected output format, and produces a review report.
 
-## Scope and lawful use
+All media processing is local. No account, subscription, or upload is required. Your media, masks, OCR text, and outputs stay on this computer. The default OCR and cleanup path doesn't fetch models at runtime. Optional engines can download model material only after you enable them. See [Optional model network paths](#optional-model-network-paths) and the [privacy and network guide](docs/privacy-and-network.md) for the complete list.
 
-This tool is for footage you have the right to change. It removes burned-in
-subtitles and text watermarks by rebuilding the pixels underneath, which is
-useful when you own the source and need a clean plate: your own recordings,
-your own generated video, material you have licensed, or archive work where
-the caption is baked into the picture and the rights are yours to exercise.
+The two non-model requests are an opt-in GitHub update check and an opt-in crash report. The `update_check` setting is `false` by default. Crash reporting works only when both `VSR_GLITCHTIP_DSN` and `VSR_CRASH_REPORTS=1` are set. Set `VSR_CRASH_REPORTS=0` to disable it.
 
-It does not touch provenance. There is no code here that reads, strips, or
-forges C2PA manifests, invisible pixel watermarks, or embedded content
-credentials, and there will not be. Removing a caption a person can see is a
-different act from erasing a cryptographic record of where a file came from,
-and only the first one is what this is for.
+## See the review tools
 
-Whether a given clip is yours to edit is your call, not the software's. The
-MIT licence covers the code and says nothing about the media you feed it.
-
-## Interface
-
-The main workspace keeps the current frame large even when settings are open.
-Set region, Review mask, and Test cleanup stay visible. Less common commands sit
-under More, and each queue row grows to fit its filename and file details. At
-larger text sizes, the command strip and preview header reflow instead of
-crowding the work area.
-
-![Video Subtitle Remover Pro workspace with a test video loaded](assets/screenshots/02-main-media.png)
-
-Track selection says exactly what will be removed. Region and mask tools keep the media large while the controls stay grouped beside it.
+Track selection says exactly what will be removed. Region and mask tools keep the media large while their controls stay grouped beside it.
 
 | Track review | Mask correction |
 |---|---|
@@ -75,6 +53,15 @@ Track selection says exactly what will be removed. Region and mask tools keep th
 | Region editor | Help and diagnostics |
 |---|---|
 | ![Subtitle region editor](assets/screenshots/06-region-editor.png) | ![Help and diagnostics window](assets/screenshots/05-help.png) |
+
+## Scope and lawful use
+
+Use VSR Pro only with footage you have the right to change. It rebuilds the visible pixels under burned-in subtitles and text watermarks. It doesn't read, strip, or forge C2PA manifests, invisible pixel watermarks, or embedded content
+credentials.
+
+The MIT license covers the code. It doesn't grant rights to the media you process.
+
+This project builds on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover). This edition adds a desktop review workflow, local LaMa inpainting, multiple detection engines, and a 52-code language picker with broader OCR engine coverage.
 
 ## Features
 
@@ -1620,7 +1607,7 @@ VideoSubtitleRemover/
 |-- tools/                    # Local developer smoke helpers
 |-- .github/                  # Issue templates
 |-- assets/                   # Application assets
-|-- models/                   # AI model weights (auto-downloaded)
+|-- models/                   # Optional and user-supplied model weights
 `-- output/                   # Default output location
 ```
 

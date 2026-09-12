@@ -136,7 +136,7 @@ def consume_preset_import_notice() -> Optional[str]:
 # -- App identity -----------------------------------------------------------
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.41.0"
+APP_VERSION = "3.42.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -629,6 +629,9 @@ class ProcessingConfig:
 
     # UI state (persisted across sessions)
     window_geometry: str = ""
+    # RM-340: geometry alone loses a maximized window, which reopens as
+    # the restored size it had before it was maximized.
+    window_maximized: bool = False
     adv_panel_open: bool = False
     log_panel_open: bool = False
     onboarding_seen: bool = False
@@ -905,6 +908,8 @@ class ProcessingConfig:
         self.karaoke_y_overlap = _coerce_float(
             self.karaoke_y_overlap, 0.5, 0.0, 1.0)
         self.window_geometry = _coerce_text(self.window_geometry, "", 64)
+        self.window_maximized = _coerce_bool(
+            self.window_maximized, False)
         self.adv_panel_open = _coerce_bool(self.adv_panel_open, False)
         self.log_panel_open = _coerce_bool(self.log_panel_open, False)
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)

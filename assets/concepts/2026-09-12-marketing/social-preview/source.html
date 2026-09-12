@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Subtitle Remover Pro social preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 1280px; height: 640px; margin: 0; overflow: hidden; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #f8fafc;
+      background:
+        radial-gradient(circle at 82% 24%, rgba(37, 99, 235, 0.24), transparent 34%),
+        linear-gradient(135deg, #07101d 0%, #0b1423 56%, #07101d 100%);
+    }
+    .canvas {
+      position: relative;
+      width: 1280px;
+      height: 640px;
+      padding: 58px 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .brand img { width: 74px; height: 74px; }
+    .brand-name { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+    .eyebrow {
+      color: #67e8f9;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .copy { position: absolute; left: 64px; top: 176px; width: 474px; }
+    h1 {
+      margin: 0;
+      font-size: 55px;
+      line-height: 1.03;
+      letter-spacing: -0.035em;
+      max-width: 470px;
+    }
+    .subhead {
+      margin: 22px 0 0;
+      max-width: 430px;
+      color: #b8c8df;
+      font-size: 22px;
+      line-height: 1.42;
+    }
+    .proof {
+      display: flex;
+      gap: 10px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      border: 1px solid #2e4f78;
+      border-radius: 999px;
+      background: rgba(16, 34, 57, 0.88);
+      color: #dbeafe;
+      padding: 9px 14px 10px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .product {
+      position: absolute;
+      left: 566px;
+      top: 108px;
+      width: 678px;
+      padding: 9px;
+      border: 1px solid #31598a;
+      border-radius: 16px;
+      background: #0c1727;
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
+      transform: rotate(0.4deg);
+    }
+    .window-bar {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 7px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #274766; }
+    .dot.active { background: #22d3ee; }
+    .product img {
+      display: block;
+      width: 658px;
+      height: 411px;
+      object-fit: cover;
+      object-position: center;
+      border-radius: 9px;
+      border: 1px solid #1f3655;
+    }
+    .footer {
+      position: absolute;
+      left: 66px;
+      bottom: 34px;
+      color: #7790ae;
+      font-size: 15px;
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header class="brand">
+      <img src="../../../../icon.png" alt="">
+      <div>
+        <div class="eyebrow">Windows desktop app</div>
+        <div class="brand-name">Video Subtitle Remover Pro</div>
+      </div>
+    </header>
+
+    <section class="copy">
+      <h1>Remove subtitles.<br>Keep the frame.</h1>
+      <p class="subhead">Reviewable, local cleanup for burned-in text, captions, and visible watermarks.</p>
+      <div class="proof">
+        <span class="chip">Local processing</span>
+        <span class="chip">CPU + NVIDIA</span>
+        <span class="chip">Frame-aware repair</span>
+        <span class="chip">No account</span>
+      </div>
+    </section>
+
+    <section class="product" aria-label="Product screenshot">
+      <div class="window-bar"><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
+      <img src="../../../screenshots/02-main-media.png" alt="">
+    </section>
+
+    <footer class="footer">github.com/SysAdminDoc/VideoSubtitleRemover</footer>
+  </main>
+</body>
+</html>

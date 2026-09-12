@@ -384,6 +384,53 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
                 dialog.destroy()
             self._destroy_app(app)
 
+    def test_help_wraps_runtime_facts_without_truncating_them(self):
+        app = self._make_app()
+        dialog = None
+        try:
+            inpainting = "TBE/OpenCV ready; optional LaMa model is not installed"
+            models = "RapidOCR model weights ready; optional LaMa weights missing"
+            app._hardware_probe_pending = False
+            app.gpus = [{"name": "Example GPU", "memory": "12 GB", "index": 0}]
+            app.ai_engines = {
+                "detection": ["RapidOCR"],
+                "inpainting": ["Temporal BG (TBE)", "OpenCV"],
+            }
+            app.backend_status = {
+                "summary": {
+                    "tone": "success",
+                    "detection": "RapidOCR via ONNX Runtime (ready)",
+                    "inpainting": inpainting,
+                    "model_files": models,
+                    "next_action": "No backend setup action needed.",
+                },
+            }
+
+            app._show_about()
+            dialog = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+            )
+            dialog.update_idletasks()
+            labels = [
+                widget for widget in self._walk(dialog)
+                if isinstance(widget, tk.Label)
+            ]
+            by_text = {str(label.cget("text")): label for label in labels}
+
+            self.assertIn(inpainting, by_text)
+            self.assertIn(models, by_text)
+            self.assertGreater(int(by_text[inpainting].cget("wraplength")), 0)
+            self.assertGreater(int(by_text[models].cget("wraplength")), 0)
+        finally:
+            if dialog is not None:
+                try:
+                    dialog.grab_release()
+                except tk.TclError:
+                    pass
+                dialog.destroy()
+            self._destroy_app(app)
+
     def test_region_changes_propagate_to_idle_queue_snapshots(self):
         app = self._app_exports.VideoSubtitleRemoverApp.__new__(
             self._app_exports.VideoSubtitleRemoverApp

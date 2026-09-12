@@ -374,6 +374,59 @@ def _required_option(args: list[str], option: str) -> str:
         raise ValueError(f"{option} requires a value") from exc
 
 
+# RM-340: the old code commented "Per-Monitor V2 first" and then called
+# SetProcessDpiAwareness(2), which is PROCESS_PER_MONITOR_DPI_AWARE, i.e. V1.
+# V2 is only reachable through SetProcessDpiAwarenessContext, and it is what
+# makes non-client areas and child dialogs rescale when a window moves to a
+# monitor with a different scale factor.
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+PROCESS_PER_MONITOR_DPI_AWARE = 2
+PROCESS_SYSTEM_DPI_AWARE = 1
+
+
+def _request_dpi_awareness() -> str:
+    """Ask for the best DPI awareness this Windows offers.
+
+    Returns which rung was taken, so a test can assert the ladder rather than
+    inspect the process. Every rung is a separate API: V2 needs
+    SetProcessDpiAwarenessContext (1703+), V1 needs SetProcessDpiAwareness
+    (8.1+), and the last rung is the Vista-era SetProcessDPIAware.
+    """
+    if sys.platform != "win32":
+        return "not-windows"
+    import ctypes
+    from ctypes import windll, wintypes
+
+    try:
+        # DPI_AWARENESS_CONTEXT is a pointer-sized handle. Without argtypes
+        # ctypes passes a 32-bit int and the call fails on 64-bit Windows.
+        set_context = windll.user32.SetProcessDpiAwarenessContext
+        set_context.argtypes = [ctypes.c_void_p]
+        set_context.restype = wintypes.BOOL
+        if set_context(ctypes.c_void_p(
+                DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)):
+            return "per-monitor-v2"
+    except Exception:  # noqa: BLE001 - older Windows lacks the export
+        logger.debug("Per-Monitor V2 DPI awareness unavailable", exc_info=True)
+    try:
+        windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
+        return "per-monitor-v1"
+    except Exception:  # noqa: BLE001 - older than 8.1, or already set
+        logger.debug("Per-Monitor V1 DPI awareness unavailable", exc_info=True)
+    try:
+        windll.shcore.SetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE)
+        return "system"
+    except Exception:  # noqa: BLE001 - fall through to the oldest API
+        logger.debug("System DPI awareness via shcore unavailable",
+                     exc_info=True)
+    try:
+        windll.user32.SetProcessDPIAware()
+        return "system-legacy"
+    except Exception:  # noqa: BLE001 - nothing left to try
+        logger.debug("No DPI awareness API succeeded", exc_info=True)
+    return "none"
+
+
 APP_USER_MODEL_ID = "SysAdminDoc.VideoSubtitleRemoverPro"
 
 
@@ -438,16 +491,7 @@ def main():
     if "--smoke-test" in sys.argv[1:]:
         sys.exit(_run_smoke_test())
 
-    # High DPI support on Windows -- Per-Monitor V2 for best multi-monitor support
-    try:
-        from ctypes import windll
-        # Try Per-Monitor V2 first (Windows 10 1703+), then fall back
-        try:
-            windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        pass
+    _request_dpi_awareness()
 
     _set_app_user_model_id()
 

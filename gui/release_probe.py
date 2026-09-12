@@ -325,8 +325,13 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
             failures = []
             if app.root.state() != "withdrawn":
                 failures.append("root is not withdrawn")
-            if (app.root.winfo_width(), app.root.winfo_height()) != (980, 720):
-                failures.append("root is not at the 980x720 minimum viewport")
+            expected_floor = app._scaled_minimum_size(980, 720)
+            actual_floor = (app.root.winfo_width(), app.root.winfo_height())
+            if actual_floor != expected_floor:
+                failures.append(
+                    "root does not match the scaled minimum viewport "
+                    f"{expected_floor[0]}x{expected_floor[1]}"
+                )
             if app._content_canvas.xview() != (0.0, 1.0):
                 failures.append("content requires horizontal scrolling")
             if app._layout_mode != "stacked":

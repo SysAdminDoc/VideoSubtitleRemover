@@ -16,7 +16,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui.theme import Theme
-from gui.utils import desktop_bounds
+from gui.utils import desktop_bounds, monitor_work_area
 
 
 # Reserve room for the taskbar / dock and the window chrome. Deliberately
@@ -29,12 +29,16 @@ MIN_DIALOG_HEIGHT = 220
 
 
 def work_area(root) -> tuple[int, int]:
-    """Usable width/height for a dialog on the screen holding ``root``."""
-    try:
-        screen_w = int(root.winfo_screenwidth())
-        screen_h = int(root.winfo_screenheight())
-    except Exception:
-        return (1024, 720)
+    """Usable width/height for a dialog on the monitor holding ``root``.
+
+    RM-340: this used to read winfo_screenwidth/height, which report the
+    primary display on Windows, and multiply by a fraction standing in for the
+    taskbar. On a secondary monitor of a different size that is wrong twice.
+    The real work area comes from GetMonitorInfo for the monitor the parent is
+    actually on, with the taskbar already excluded, so no fraction is needed.
+    The fraction survives only as the fallback for platforms and states where
+    that query cannot answer.
+    """
     override = getattr(root, "_vsr_work_area_override", None)
     if isinstance(override, (tuple, list)) and len(override) == 2:
         try:
@@ -42,6 +46,20 @@ def work_area(root) -> tuple[int, int]:
                     max(MIN_DIALOG_HEIGHT, int(override[1])))
         except (TypeError, ValueError):
             pass
+
+    measured = monitor_work_area(root)
+    if measured is not None:
+        _x, _y, width, height = measured
+        # A small inset for the window frame itself, which the work area
+        # includes; the taskbar is already out.
+        return (max(MIN_DIALOG_WIDTH, int(width) - 16),
+                max(MIN_DIALOG_HEIGHT, int(height) - 16))
+
+    try:
+        screen_w = int(root.winfo_screenwidth())
+        screen_h = int(root.winfo_screenheight())
+    except Exception:
+        return (1024, 720)
     return (
         max(MIN_DIALOG_WIDTH, int(screen_w * WORK_AREA_WIDTH_FRACTION)),
         max(MIN_DIALOG_HEIGHT, int(screen_h * WORK_AREA_HEIGHT_FRACTION)),

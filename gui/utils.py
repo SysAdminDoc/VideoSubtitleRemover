@@ -102,6 +102,64 @@ def collect_supported_files(
     return matches, hit_cap
 
 
+def monitor_work_area(window) -> tuple:
+    """Work area of the monitor that actually hosts ``window``, or None.
+
+    RM-340: dialogs were sized from winfo_screenwidth/height, which report the
+    primary display, times a hardcoded fraction standing in for the taskbar.
+    On a secondary monitor of a different size that is the wrong number twice
+    over. GetMonitorInfo returns the real work area, taskbar already excluded,
+    for the monitor the parent window is on.
+
+    Returns ``(x, y, width, height)`` or ``None`` when the platform or the
+    window cannot answer, so the caller keeps its existing fallback.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        handle = int(window.winfo_id())
+    except Exception:
+        return None
+    if not handle:
+        return None
+
+    class _RECT(ctypes.Structure):
+        _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                    ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+    class _MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", _RECT),
+                    ("rcWork", _RECT), ("dwFlags", wintypes.DWORD)]
+
+    try:
+        user32 = ctypes.windll.user32
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        # Tk reports the HWND of the widget, whose top-level owns the
+        # placement; MONITOR_DEFAULTTONEAREST keeps an off-screen window
+        # answering with the closest monitor rather than nothing.
+        monitor = user32.MonitorFromWindow(wintypes.HWND(handle), 2)
+        if not monitor:
+            return None
+        info = _MONITORINFO()
+        info.cbSize = ctypes.sizeof(_MONITORINFO)
+        user32.GetMonitorInfoW.argtypes = [
+            wintypes.HANDLE, ctypes.POINTER(_MONITORINFO)]
+        if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            return None
+        work = info.rcWork
+        width = int(work.right - work.left)
+        height = int(work.bottom - work.top)
+        if width <= 0 or height <= 0:
+            return None
+        return (int(work.left), int(work.top), width, height)
+    except Exception:
+        return None
+
+
 def desktop_bounds(primary_w: int, primary_h: int) -> tuple:
     """Return (x, y, w, h) covering every monitor, not just the primary.
 

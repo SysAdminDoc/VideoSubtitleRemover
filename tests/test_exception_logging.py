@@ -30,7 +30,6 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
         for phrase in (
             "RapidOCR SRT extraction failed",
             "PaddleOCR SRT extraction failed",
-            "EasyOCR SRT extraction failed",
             "Quality ROI metric calculation failed",
             "Detection denoise fell back",
             "Video writer release failed",

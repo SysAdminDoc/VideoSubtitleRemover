@@ -19,10 +19,9 @@ from gui.config import (
 )
 from gui.utils import (
     dispatch_to_ui,
-    truncate_middle,
 )
 from gui.widgets import (
-    ModernButton, Tooltip,
+    ModernButton,
     make_themed_menu,
 )
 from gui.dialog_layout import (
@@ -781,19 +780,19 @@ class SupportControllerMixin:
         def fact(parent, label, value, tone=Theme.TEXT_PRIMARY):
             row = tk.Frame(parent, bg=Theme.BG_SECONDARY)
             row.pack(fill="x", pady=Theme.S_XS)
+            row.columnconfigure(1, weight=1)
             tk.Label(
                 row, text=label, font=f(Theme.F_BODY_SM),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-            ).pack(side="left")
+            ).grid(row=0, column=0, sticky="nw")
             full_value = str(value)
-            display = truncate_middle(full_value, 34)
             value_label = tk.Label(
-                row, text=display, font=f(Theme.F_BODY_SM, "bold"),
-                bg=Theme.BG_SECONDARY, fg=tone,
+                row, text=full_value, font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=tone, anchor="e",
+                justify="right", wraplength=250,
             )
-            value_label.pack(side="right", padx=(Theme.S_SM, 0))
-            if display != full_value:
-                Tooltip(value_label, full_value)
+            value_label.grid(
+                row=0, column=1, sticky="ne", padx=(Theme.S_SM, 0))
 
         section_title(system, tr("System"))
         fact(system, tr("Compute"), gpu_label)
@@ -955,4 +954,3 @@ class SupportControllerMixin:
             close_btn.focus_set()
         except Exception:
             pass
-
