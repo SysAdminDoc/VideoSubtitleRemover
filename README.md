@@ -20,7 +20,8 @@ Review the mask, keep the footage local, and render with the CPU or NVIDIA build
 
 </div>
 
-![Video Subtitle Remover Pro showing a realistic subtitled video ready for cleanup](assets/screenshots/02-main-media.png)
+<img width="1280" height="640" alt="Codex Image Sep 12, 2026, 04_25_15 PM" src="https://github.com/user-attachments/assets/256ae00b-0ff8-466f-8aeb-4c993a69d7b9" />
+
 
 <p align="center"><sub>Actual v3.42.0 Windows interface. The demonstration clip is included in the repository.</sub></p>
 
