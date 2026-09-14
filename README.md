@@ -20,6 +20,16 @@ Review the mask, keep the footage local, and render with the CPU or NVIDIA build
 
 </div>
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If VSR Pro saves you cleanup time, a coffee helps me keep its restoration tools tested and maintained.</em></sub>
+</p>
+
 <img width="1280" height="640" alt="Codex Image Sep 12, 2026, 04_25_15 PM" src="https://github.com/user-attachments/assets/256ae00b-0ff8-466f-8aeb-4c993a69d7b9" />
 
 
