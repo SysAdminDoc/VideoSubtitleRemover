@@ -6,9 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
-- The README's speed table now has numbers a download decision can rest on: a 720p, twelve-second clip run with automatic detection on both the CPU and NVIDIA builds, beside the old 160x96 fixture that only proved which provider loaded. The result isn't flattering and it's published anyway. Both builds ran at about 1.1 frames per second with identical output, because OCR still runs on the CPU in the NVIDIA build and the default cleanup is CPU work in both. Every measured clip now has its licence recorded next to the evidence.
+- The README's speed table now has numbers a download decision can rest on: a 720p, twelve-second clip run with automatic detection on both the CPU and NVIDIA builds, beside the old 160x96 fixture that only proved which provider loaded. The first measurement had both builds at about 1.1 frames per second, which is how the OCR problem below came to light. Every measured clip now has its licence recorded next to the evidence.
 
 ### Fixed
+
+- The NVIDIA build now runs OCR on the graphics card. Asking for a CUDA device left the text detector on the CPU, so the one kind of AI work every automatic run does never touched the card the 2 GB download exists for. On the 720p benchmark clip the NVIDIA build now runs about 1.85 times faster than the CPU build (2.08 against 1.12 frames per second), where before it was no faster at all. If the card can't be used, OCR falls back to the CPU and the run's execution report says exactly why.
 
 - Ordinary footage no longer fails or comes back in the wrong colours. The final encode reads the app's own RGB frames and used to let FFmpeg pick the pixel format and the colour conversion. On a machine with an NVIDIA card that meant RGB H.264, which most players can't decode, so a typical BT.709 clip failed its own output check and the run ended with an error. The software encoder finished the job but wrote High 4:4:4 from a 4:2:0 source, which browsers and phones won't play, and converted with a different matrix than the one the frames were decoded with, so every pixel the job never touched shifted colour. On flat colour bands that shift was 6.94 levels of luma. The encode now converts back to the source's own layout (4:2:0 stays 4:2:0) with the exact inverse of the decode and keeps the source's colour tags, on the software, NVENC, QSV, AMF and D3D12 paths alike. The same bands now come back within 1.15 levels, and most of what's left is the decoder's own rounding, which is tracked separately.
 

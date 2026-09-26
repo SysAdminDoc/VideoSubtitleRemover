@@ -35,15 +35,15 @@
   },
   "memory": {
     "gpu": {
-      "baselineMiB": 986,
-      "deltaMiB": 2,
+      "baselineMiB": 925,
+      "deltaMiB": 453,
       "measured": true,
-      "peakMiB": 988,
-      "sampleCount": 1162,
+      "peakMiB": 1378,
+      "sampleCount": 893,
       "sampleIntervalSeconds": 0.25,
       "scope": "device-wide"
     },
-    "peakWorkingSetBytes": 4313051136
+    "peakWorkingSetBytes": 5242347520
   },
   "passed": true,
   "profile": "nvidia",
@@ -166,7 +166,7 @@
           "threshold": 0.025
         }
       ],
-      "outside_mask_color_drift": 0.5114538524713781,
+      "outside_mask_color_drift": 0.5114405999581019,
       "outside_mask_color_drift_frames": 288,
       "outside_mask_color_drift_metric": "cielab_delta_e",
       "outside_mask_color_drift_threshold": 1.0,
@@ -233,7 +233,7 @@
         "missedDetectionBoxes": 0,
         "ran": true,
         "schema": "vsr.removal_verification.v1",
-        "seconds": 17.602363,
+        "seconds": 3.525044,
         "sourceBoxes": 10,
         "sourceScannedFrames": 10,
         "survivingFraction": 0.0,
@@ -261,7 +261,7 @@
         "ssim": 0.6864879329999288
       },
       "samples": 10,
-      "seam_score": 0.23807810264793014,
+      "seam_score": 0.22914735474546133,
       "sheet": null,
       "ssim": 0.9785923918088277,
       "ssim_harmonic_mean": 0.9785907484096383,
@@ -269,12 +269,12 @@
       "temporal_consistency": null,
       "temporal_exposure": {
         "batches": 10,
-        "cv2Pixels": 14317071,
+        "cv2Pixels": 14330575,
         "degradedThreshold": 0.05,
         "degradedToCv2": true,
-        "exposedFraction": 0.039700671414726454,
-        "exposedPixels": 591896,
-        "maskedPixels": 14908967
+        "exposedFraction": 0.03881682763658968,
+        "exposedPixels": 578732,
+        "maskedPixels": 14909307
       },
       "temporal_flicker_score": 0.0028386267367750406,
       "vmaf": null,
@@ -290,31 +290,31 @@
   "runs": [
     {
       "error": "",
-      "fps": 1.1278,
+      "fps": 2.0844,
       "frames": 288,
       "label": "cold",
       "ok": true,
       "outputFrames": {
         "frame_count": 288,
         "height": 720,
-        "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
+        "sha256": "ecdd82b4b94e4efca69ceadb832dcc76178698d2a1dad38383457e8f87137496",
         "width": 1280
       },
-      "seconds": 255.362411
+      "seconds": 138.169514
     },
     {
       "error": "",
-      "fps": 1.0689,
+      "fps": 2.0835,
       "frames": 288,
       "label": "warm1",
       "ok": true,
       "outputFrames": {
         "frame_count": 288,
         "height": 720,
-        "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
+        "sha256": "ecdd82b4b94e4efca69ceadb832dcc76178698d2a1dad38383457e8f87137496",
         "width": 1280
       },
-      "seconds": 269.447694
+      "seconds": 138.226405
     }
   ],
   "runtime": {
@@ -336,7 +336,7 @@
   "timing": {
     "identicalOutputs": true,
     "outputDigests": [
-      "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba"
+      "ecdd82b4b94e4efca69ceadb832dcc76178698d2a1dad38383457e8f87137496"
     ],
     "runCount": 2
   },

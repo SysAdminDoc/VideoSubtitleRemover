@@ -35,15 +35,15 @@
   },
   "memory": {
     "gpu": {
-      "baselineMiB": 850,
-      "deltaMiB": 3,
+      "baselineMiB": 749,
+      "deltaMiB": 6,
       "measured": true,
-      "peakMiB": 853,
-      "sampleCount": 1156,
+      "peakMiB": 755,
+      "sampleCount": 1166,
       "sampleIntervalSeconds": 0.25,
       "scope": "device-wide"
     },
-    "peakWorkingSetBytes": 3696484352
+    "peakWorkingSetBytes": 3711078400
   },
   "passed": true,
   "profile": "cpu",
@@ -233,7 +233,7 @@
         "missedDetectionBoxes": 0,
         "ran": true,
         "schema": "vsr.removal_verification.v1",
-        "seconds": 17.981657,
+        "seconds": 16.846788,
         "sourceBoxes": 10,
         "sourceScannedFrames": 10,
         "survivingFraction": 0.0,
@@ -290,7 +290,7 @@
   "runs": [
     {
       "error": "",
-      "fps": 1.1377,
+      "fps": 1.1214,
       "frames": 288,
       "label": "cold",
       "ok": true,
@@ -300,11 +300,11 @@
         "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
         "width": 1280
       },
-      "seconds": 253.138048
+      "seconds": 256.822364
     },
     {
       "error": "",
-      "fps": 1.0905,
+      "fps": 1.1283,
       "frames": 288,
       "label": "warm1",
       "ok": true,
@@ -314,7 +314,7 @@
         "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
         "width": 1280
       },
-      "seconds": 264.106554
+      "seconds": 255.244496
     }
   ],
   "runtime": {

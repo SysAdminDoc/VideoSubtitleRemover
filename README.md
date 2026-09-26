@@ -555,10 +555,10 @@ Every number below came from `python -m backend.provider_benchmark`, which runs 
 
 | Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
 |------|-------------------|------|------|----------|------------|
-| CPU | `CPUExecutionProvider` | 1.14 FPS | 1.09 FPS | 3525 MiB | n/a |
-| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 1.13 FPS | 1.07 FPS | 4113 MiB | +2 MiB device-wide |
+| CPU | `CPUExecutionProvider` | 1.12 FPS | 1.13 FPS | 3539 MiB | n/a |
+| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 2.08 FPS | 2.08 FPS | 4999 MiB | +453 MiB device-wide |
 
-Right now the NVIDIA build isn't faster at this. Both lanes produced byte-identical frames at the same speed, and the CUDA run barely touched the card. OCR still runs on ONNX Runtime's CPU provider in the NVIDIA build, and the default cleanup (temporal background exposure) is CPU work in both builds. Today the card pays off for the LaMa and ProPainter cleanup modes and the opt-in model adapters, not for a default run. Moving OCR onto CUDA is the next change planned for this lane, and this table gets measured again when it lands.
+The NVIDIA build runs this clip about 1.85 times faster. OCR runs on the card there, and it's the stage a default run spends most of its inference on. The default cleanup (temporal background exposure) is still CPU work in both builds, which is why the gap isn't wider, while the LaMa and ProPainter cleanup modes and the opt-in model adapters use the card too. The two lanes' frames aren't byte-identical: OCR on the GPU places a few boxes a pixel differently. Their quality metrics agree to three decimals (ROI PSNR 16.714, ROI SSIM 0.7218 and residual text 0.2510 on both), and only the seam score moves, 0.238 against 0.229.
 
 Clip: `tests/benchmarks/benchmark_720p.mkv`, rendered by `scripts/generate_benchmark_clip.py`. It's synthetic and MIT licensed like the rest of the repository. The two runs, the second from the NVIDIA environment:
 
