@@ -591,6 +591,15 @@ def _validate_video_input_file(path: str) -> None:
 
 
 def _video_capture_open_error(path: str, decode_path: str) -> MediaInputError:
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        return MediaInputError(
+            "Reading video needs FFmpeg 9.0.1 or newer. Install it (for "
+            "example with `winget install ffmpeg`) and retry. Still images "
+            "work without it.",
+            reason="ffmpeg_missing",
+            path=path,
+            detail="ffmpeg and ffprobe must both be on PATH",
+        )
     status = _probe_video_stream_status(decode_path)
     if status["available"] and status["ok"] is False:
         return _invalid_container_error(path, str(status.get("error") or ""))
@@ -700,11 +709,12 @@ def _probe_codec_for_log(path: str) -> Optional[str]:
 def probe_video_fps(path: str) -> Optional[float]:
     """Return the source video frame rate, or ``None`` when it cannot be read.
 
-    Prefers ffprobe ``avg_frame_rate`` (falling back to ``r_frame_rate``),
-    which reports the true rate for 25/30/50/60 fps and VFR sources, then
-    falls back to OpenCV ``CAP_PROP_FPS``.  Callers that need a concrete rate
-    should treat ``None`` as "probe failed" and log before substituting a
-    default -- a silently wrong fps mis-maps every timecode->frame conversion.
+    Uses ffprobe ``avg_frame_rate`` (falling back to ``r_frame_rate``),
+    which reports the true rate for 25/30/50/60 fps and VFR sources. There is
+    no OpenCV fallback: its embedded FFmpeg predates the reviewed security
+    floor (RM-348). Callers that need a concrete rate should treat ``None``
+    as "probe failed" and log before substituting a default -- a silently
+    wrong fps mis-maps every timecode->frame conversion.
     """
     if not Path(path).is_dir() and shutil.which("ffprobe") is not None:
         try:
@@ -730,19 +740,6 @@ def probe_video_fps(path: str) -> Optional[float]:
             ValueError,
         ) as exc:
             logger.debug("ffprobe fps probe failed for %s: %s", path, exc)
-
-    try:
-        import cv2 as _cv2  # local import keeps ffprobe-only callers cv2-free
-        cap = _cv2.VideoCapture(path)
-        try:
-            if cap.isOpened():
-                fps = float(cap.get(_cv2.CAP_PROP_FPS) or 0.0)
-                if fps > 0 and np.isfinite(fps):
-                    return fps
-        finally:
-            cap.release()
-    except Exception as exc:  # noqa: BLE001 - cv2 decode/backend variability
-        logger.debug("OpenCV fps probe failed for %s: %s", path, exc)
     return None
 
 
@@ -1687,15 +1684,27 @@ class _FrameSequenceCapture:
         return None
 
 
-class _FfmpegBgr48Capture:
-    """cv2.VideoCapture-shaped ffmpeg rawvideo reader for HDR surfaces.
+# A forward seek this short reads ahead on the running decoder instead of
+# starting a new FFmpeg process at the target.
+_FFMPEG_SKIP_AHEAD_FRAMES = 48
 
-    OpenCV's normal video path returns 8-bit BGR for HDR10/HLG content.
-    This reader asks ffmpeg for BGR48LE so the processor can keep a
-    high-bit source surface around its existing 8-bit model inputs.
+
+class _FfmpegCapture:
+    """cv2.VideoCapture-shaped reader over the external FFmpeg binary.
+
+    RM-348: OpenCV's wheel embeds FFmpeg 7.1, which predates every 2026
+    advisory the external 9.0.1 floor exists for, so user media is decoded
+    by the external binary instead and piped back as raw frames. The
+    reader only offers what the product calls: ``isOpened``, ``read``,
+    ``grab``/``retrieve``, ``release`` and the ``CAP_PROP_*`` fields for
+    size, rate, count and position.
+
+    ``decode_matrix`` and ``decode_range`` record the Y'CbCr conversion this
+    reader applied (empty for RGB and gray sources), so the final encode can
+    invert exactly that conversion rather than guess it.
     """
 
-    pixel_format = "bgr48le"
+    pixel_format = "bgr24"
 
     def __init__(
         self,
@@ -1705,8 +1714,14 @@ class _FfmpegBgr48Capture:
         height: int,
         fps: float,
         frame_count: int,
+        pixel_format: Optional[str] = None,
+        video_filter: str = "",
+        hw_accel: str = "off",
+        decode_matrix: str = "",
+        decode_range: str = "",
     ):
         self._path = path
+        self.pixel_format = pixel_format or type(self).pixel_format
         self._width = int(width)
         self._height = int(height)
         try:
@@ -1714,13 +1729,24 @@ class _FfmpegBgr48Capture:
         except (TypeError, ValueError):
             fps_f = 30.0
         self._fps = fps_f if np.isfinite(fps_f) and fps_f > 0 else 30.0
-        self._frame_count = max(1, int(frame_count))
+        # An estimate until set_frame_timing supplies the real count, so
+        # reads continue to end of stream rather than stopping at a header
+        # figure that can be short.
+        self._frame_count = max(1, int(frame_count or 0))
+        self._frame_count_exact = False
         self._pos = 0
         self._frame_timestamps: Optional[List[float]] = None
         self._frame_timestamp_fractions: Optional[List[Fraction]] = None
         self._frame_timing_exact = False
         self._proc: Optional[subprocess.Popen] = None
-        self._frame_bytes = self._width * self._height * 3 * 2
+        self._grabbed: Optional[bytes] = None
+        self._video_filter = str(video_filter or "")
+        self._hw_accel_args = _ffmpeg_hwaccel_args(hw_accel)
+        self.decode_matrix = decode_matrix
+        self.decode_range = decode_range
+        high_bit = self.pixel_format == "bgr48le"
+        self._dtype = np.uint16 if high_bit else np.uint8
+        self._frame_bytes = self._width * self._height * 3 * (2 if high_bit else 1)
         self._opened = (
             shutil.which("ffmpeg") is not None
             and self._width > 0
@@ -1745,13 +1771,31 @@ class _FfmpegBgr48Capture:
         return 0.0
 
     def set(self, prop, value) -> bool:
+        orientation = getattr(cv2, "CAP_PROP_ORIENTATION_AUTO", None)
+        if orientation is not None and prop == orientation:
+            # FFmpeg applies the display matrix itself (-autorotate).
+            return True
         if prop != cv2.CAP_PROP_POS_FRAMES:
             return False
         try:
             pos = int(value)
         except (TypeError, ValueError):
             pos = 0
-        self._pos = max(0, min(self._frame_count, pos))
+        pos = max(0, pos)
+        if self._frame_count_exact:
+            pos = min(self._frame_count, pos)
+        if (
+            self._proc is not None
+            and self._proc.poll() is None
+            and self._pos <= pos <= self._pos + _FFMPEG_SKIP_AHEAD_FRAMES
+        ):
+            # Preview code steps through neighbouring frames; reading ahead
+            # on the running decoder is far cheaper than a new process.
+            while self._pos < pos and self.grab():
+                pass
+            self._grabbed = None
+            return True
+        self._pos = pos
         self._restart()
         return True
 
@@ -1791,6 +1835,7 @@ class _FfmpegBgr48Capture:
                 ]
                 self._frame_timing_exact = True
                 self._frame_count = len(fractions)
+                self._frame_count_exact = True
             return
         values = []
         for value in timestamps:
@@ -1808,40 +1853,60 @@ class _FfmpegBgr48Capture:
             ]
             self._frame_timing_exact = False
             self._frame_count = len(values)
+            self._frame_count_exact = True
 
     def _restart(self) -> None:
         self.release()
+
+    def _seek_seconds(self) -> str:
+        """Where to start so the first frame out is frame ``_pos``.
+
+        FFmpeg's input seek decodes from the preceding keyframe and drops
+        frames timed before the target. A known timestamp is exact enough,
+        since FFmpeg truncates the target to microseconds. An estimate from
+        the frame rate is not: at 29.97 fps, frame 10 is at 0.3336667 s and
+        10 / 29.97 formats as 0.333667, which drops the frame it names, so
+        the estimate aims half a frame early instead.
+        """
+        pos = self._pos
+        if (
+            self._frame_timestamps is not None
+            and pos < len(self._frame_timestamps)
+        ):
+            if (
+                self._frame_timing_exact
+                and self._frame_timestamp_fractions is not None
+            ):
+                return _fraction_to_decimal(
+                    self._frame_timestamp_fractions[pos], 15)
+            return f"{self._frame_timestamps[pos]:.9f}"
+        return f"{max(0.0, (pos - 0.5) / max(self._fps, 1e-6)):.9f}"
 
     def _ensure_proc(self) -> bool:
         if not self._opened:
             return False
         if self._proc is not None and self._proc.poll() is None:
             return True
+        if self._proc is not None:
+            # The previous decoder ended; a new one would restart at the
+            # current position, which is past the end of the stream.
+            return False
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats"]
+        cmd += self._hw_accel_args
         if self._pos > 0:
-            if (
-                self._frame_timestamps is not None
-                and self._pos < len(self._frame_timestamps)
-            ):
-                if (
-                    self._frame_timing_exact
-                    and self._frame_timestamp_fractions is not None
-                ):
-                    seek_seconds = _fraction_to_decimal(
-                        self._frame_timestamp_fractions[self._pos], 15)
-                else:
-                    seek_seconds = f"{self._frame_timestamps[self._pos]:.9f}"
-            else:
-                seek_seconds = f"{self._pos / max(self._fps, 1e-6):.9f}"
-            cmd += ["-ss", str(seek_seconds)]
+            cmd += ["-ss", self._seek_seconds()]
         cmd += [
             "-i", self._path,
             "-map", "0:v:0",
-            "-an", "-sn",
-            "-f", "rawvideo",
-            "-pix_fmt", self.pixel_format,
-            "-",
+            "-an", "-sn", "-dn",
+            # One raw frame per decoded frame: the rawvideo muxer would
+            # otherwise duplicate and drop frames to a constant rate, and a
+            # VFR source would lose its alignment with the PTS map.
+            "-fps_mode", "passthrough",
         ]
+        if self._video_filter:
+            cmd += ["-vf", self._video_filter]
+        cmd += ["-f", "rawvideo", "-pix_fmt", self.pixel_format, "-"]
         self._proc = popen_process(
             cmd,
             stdout=subprocess.PIPE,
@@ -1849,73 +1914,230 @@ class _FfmpegBgr48Capture:
         )
         return True
 
-    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
-        if self._pos >= self._frame_count:
-            return False, None
+    def grab(self) -> bool:
+        self._grabbed = None
+        if self._frame_count_exact and self._pos >= self._frame_count:
+            return False
         if not self._ensure_proc() or self._proc is None or self._proc.stdout is None:
-            return False, None
+            return False
         data = self._proc.stdout.read(self._frame_bytes)
         if len(data) != self._frame_bytes:
-            self.release()
+            return False
+        self._grabbed = data
+        self._pos += 1
+        return True
+
+    def retrieve(self, *_args) -> Tuple[bool, Optional[np.ndarray]]:
+        if self._grabbed is None:
             return False, None
-        frame = np.frombuffer(data, dtype=np.uint16).reshape(
+        frame = np.frombuffer(self._grabbed, dtype=self._dtype).reshape(
             (self._height, self._width, 3)
         ).copy()
-        self._pos += 1
         return True, frame
+
+    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
+        if not self.grab():
+            return False, None
+        return self.retrieve()
 
     def release(self) -> None:
         proc = self._proc
         self._proc = None
+        self._grabbed = None
         if proc is None:
             return
         try:
             if proc.stdout is not None:
                 proc.stdout.close()
-        except Exception:
-            pass
-        try:
-            if proc.stderr is not None:
-                proc.stderr.close()
-        except Exception:
-            pass
+        except OSError:
+            logger.debug("FFmpeg capture stdout close failed", exc_info=True)
         _terminate_subprocess(proc, timeout=2.0)
+
+
+class _FfmpegBgr48Capture(_FfmpegCapture):
+    """High-bit variant for HDR surfaces.
+
+    OpenCV's normal video path returns 8-bit BGR for HDR10/HLG content.
+    This reader asks ffmpeg for BGR48LE so the processor can keep a
+    high-bit source surface around its existing 8-bit model inputs.
+    """
+
+    pixel_format = "bgr48le"
+
+
+def _ffmpeg_hwaccel_args(hw_accel: str) -> List[str]:
+    """Map the product's decode-acceleration setting onto ``-hwaccel``.
+
+    FFmpeg falls back to software decoding by itself when the named method
+    cannot initialise, which is what the OpenCV path used to do by hand.
+    """
+    value = str(hw_accel or "").strip().lower()
+    method = {
+        "any": "auto",
+        "auto": "auto",
+        "d3d11": "d3d11va",
+        "vaapi": "vaapi",
+        "mfx": "qsv",
+    }.get(value)
+    return ["-hwaccel", method] if method else []
+
+
+_SWS_MATRIX_FOR_TAG = {
+    "bt709": "bt709",
+    "bt470bg": "bt470",
+    "smpte170m": "smpte170m",
+    "smpte240m": "smpte240m",
+    "fcc": "fcc",
+    "bt2020nc": "bt2020",
+    "bt2020c": "bt2020",
+    "bt2020_ncl": "bt2020",
+}
+
+
+def _probe_video_stream(path: str, *, timeout: float = 30.0) -> Optional[dict]:
+    """Everything a capture needs to know, read by ffprobe rather than OpenCV.
+
+    Width and height are the displayed size: FFmpeg rotates by the display
+    matrix before the frames reach the pipe, so a portrait phone clip
+    arrives portrait, as it did through OpenCV's orientation handling.
+    """
+    if Path(path).is_dir() or shutil.which("ffprobe") is None:
+        return None
+    try:
+        result = run_process(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries",
+                "stream=width,height,avg_frame_rate,r_frame_rate,nb_frames,"
+                "duration,pix_fmt,color_space,color_range"
+                ":stream_side_data=rotation:format=duration",
+                "-of", "json", str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        payload = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+        logger.debug("ffprobe stream probe failed for %s: %s", path, exc)
+        return None
+    streams = payload.get("streams") or []
+    stream = streams[0] if streams and isinstance(streams[0], dict) else None
+    if stream is None:
+        return None
+    try:
+        width = int(stream.get("width") or 0)
+        height = int(stream.get("height") or 0)
+    except (TypeError, ValueError):
+        return None
+    rotation = 0
+    for side_data in stream.get("side_data_list") or []:
+        if isinstance(side_data, dict) and "rotation" in side_data:
+            try:
+                rotation = int(float(side_data["rotation"]))
+            except (TypeError, ValueError):
+                rotation = 0
+    if abs(rotation) % 180 == 90:
+        width, height = height, width
+    fps = _parse_ffmpeg_ratio(stream.get("avg_frame_rate"), 0.0)
+    if fps <= 0:
+        fps = _parse_ffmpeg_ratio(stream.get("r_frame_rate"), 0.0)
+    try:
+        frame_count = int(stream.get("nb_frames") or 0)
+    except (TypeError, ValueError):
+        frame_count = 0
+    if frame_count <= 0 and fps > 0:
+        duration = _fraction_from_value(
+            stream.get("duration")
+            or (payload.get("format") or {}).get("duration"),
+            allow_negative=False,
+        )
+        frame_count = int(round(float(duration) * fps))
+    return {
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "frameCount": frame_count,
+        "rotation": rotation,
+        "pixelFormat": str(stream.get("pix_fmt") or ""),
+        "colorSpace": str(stream.get("color_space") or "").lower(),
+        "colorRange": str(stream.get("color_range") or "").lower(),
+    }
+
+
+def _sdr_decode_colorimetry(stream: dict) -> Tuple[str, str]:
+    """The matrix and range a YUV source is decoded with.
+
+    The tagged matrix and range where the file states them: OpenCV ignored
+    both, decoding everything as BT.601 and every non-yuvj stream as limited
+    range, which clipped full-range VP9 outright. Untagged sources keep
+    FFmpeg's own defaults. Empty strings for RGB and gray sources, which
+    carry no matrix.
+    """
+    pixel_format = str(stream.get("pixelFormat") or "").lower()
+    if not pixel_format.startswith(("yuv", "nv", "p0", "p2", "p4")):
+        return "", ""
+    matrix = _SWS_MATRIX_FOR_TAG.get(
+        str(stream.get("colorSpace") or "").lower(), "bt601")
+    tagged_range = str(stream.get("colorRange") or "").lower()
+    if tagged_range in {"tv", "pc"}:
+        return matrix, tagged_range
+    return matrix, "pc" if pixel_format.startswith("yuvj") else "tv"
+
+
+def open_ffmpeg_capture(
+    path: str,
+    *,
+    hw_accel: str = "off",
+    input_fps: float = 24.0,
+    pixel_format: str = "bgr24",
+):
+    """Open a video file for decoding through the external FFmpeg.
+
+    Returns None when FFmpeg or ffprobe is missing or the file has no
+    decodable video stream; callers turn that into a user-facing error.
+    """
+    if shutil.which("ffmpeg") is None:
+        return None
+    stream = _probe_video_stream(path)
+    if stream is None or stream["width"] <= 0 or stream["height"] <= 0:
+        return None
+    fps = stream["fps"]
+    if not fps or fps <= 0:
+        fallback = float(input_fps or 24.0)
+        fps = fallback if fallback > 0 else 24.0
+    matrix, colour_range = ("", "")
+    video_filter = ""
+    if pixel_format == "bgr24":
+        matrix, colour_range = _sdr_decode_colorimetry(stream)
+        if matrix:
+            video_filter = (
+                f"scale=in_color_matrix={matrix}:in_range={colour_range}:"
+                "flags=accurate_rnd+full_chroma_int,format=bgr24"
+            )
+    capture_cls = _FfmpegBgr48Capture if pixel_format == "bgr48le" else _FfmpegCapture
+    return capture_cls(
+        path,
+        width=stream["width"],
+        height=stream["height"],
+        fps=fps,
+        frame_count=max(1, stream["frameCount"]),
+        pixel_format=pixel_format,
+        video_filter=video_filter,
+        hw_accel=hw_accel,
+        decode_matrix=matrix,
+        decode_range=colour_range,
+    )
 
 
 def _open_bgr48_capture(path: str, *, input_fps: float = 24.0):
     """Best-effort high-bit ffmpeg reader for HDR video files."""
-    if Path(path).is_dir() or shutil.which("ffmpeg") is None:
-        return None
-    cap = cv2.VideoCapture(path)
-    try:
-        if not cap.isOpened():
-            return None
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        try:
-            fps = float(fps)
-        except (TypeError, ValueError):
-            fps = 0.0
-        if not np.isfinite(fps) or fps <= 0:
-            fallback_fps = float(input_fps or 24.0)
-            fps = fallback_fps if fallback_fps > 0 else 24.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if width <= 0 or height <= 0:
-            return None
-        reader = _FfmpegBgr48Capture(
-            path,
-            width=width,
-            height=height,
-            fps=fps,
-            frame_count=max(1, frame_count),
-        )
-        if reader.isOpened():
-            logger.info("HDR high-bit decode active: ffmpeg bgr48le rawvideo")
-            return reader
-        return None
-    finally:
-        cap.release()
+    reader = open_ffmpeg_capture(
+        path, input_fps=input_fps, pixel_format="bgr48le")
+    if reader is not None and reader.isOpened():
+        logger.info("HDR high-bit decode active: ffmpeg bgr48le rawvideo")
+        return reader
+    return None
 
 
 def _enable_orientation_auto(cap):
@@ -1929,12 +2151,42 @@ def _enable_orientation_auto(cap):
     return cap
 
 
+class _ClosedCapture:
+    """What `_open_capture` returns when a file cannot be opened at all.
+
+    Callers already treat ``isOpened() == False`` as "report why", and
+    `_video_capture_open_error` explains a missing FFmpeg specifically.
+    """
+
+    def isOpened(self) -> bool:
+        return False
+
+    def read(self):
+        return False, None
+
+    def grab(self) -> bool:
+        return False
+
+    def retrieve(self, *_args):
+        return False, None
+
+    def get(self, _prop):
+        return 0.0
+
+    def set(self, _prop, _value) -> bool:
+        return False
+
+    def release(self) -> None:
+        return None
+
+
 def _open_capture(path: str, hw_accel: str = "off", *,
                   input_fps: float = 24.0):
     """Open a frame source. Directory -> ``_FrameSequenceCapture``,
     trusted ``.vpy`` -> VapourSynth bridge when ``VSR_VAPOURSYNTH=1``,
-    VSR_PYNVVIDEOCODEC=1 -> PyNvVideoCodec, else cv2.VideoCapture
-    (optionally HW-accelerated).
+    VSR_PYNVVIDEOCODEC=1 -> PyNvVideoCodec, else the external FFmpeg
+    (RM-348), optionally hardware-accelerated. Never OpenCV's embedded
+    FFmpeg, which predates the reviewed security floor.
     """
     if Path(path).is_dir():
         logger.info(f"Frame-sequence input detected at {path} (fps={input_fps})")
@@ -1964,42 +2216,17 @@ def _open_capture(path: str, hw_accel: str = "off", *,
         if str(hw_accel or "").lower() in {"pynv", "pynvvideocodec", "nvdec"}:
             logger.warning(
                 "PyNvVideoCodec decode was requested but unavailable; "
-                "falling back to software decode."
+                "falling back to FFmpeg software decode."
             )
-            return _enable_orientation_auto(cv2.VideoCapture(path))
-    if hw_accel in (None, "", "off"):
-        return _enable_orientation_auto(cv2.VideoCapture(path))
-    accel_map = {
-        "any": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
-        "auto": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
-        "d3d11": getattr(cv2, "VIDEO_ACCELERATION_D3D11", 2),
-        "vaapi": getattr(cv2, "VIDEO_ACCELERATION_VAAPI", 3),
-        "mfx": getattr(cv2, "VIDEO_ACCELERATION_MFX", 4),
-    }
-    accel_value = accel_map.get(hw_accel, accel_map["any"])
-    try:
-        cap = cv2.VideoCapture(
-            path,
-            cv2.CAP_FFMPEG,
-            [cv2.CAP_PROP_HW_ACCELERATION, accel_value],
-        )
-        _enable_orientation_auto(cap)
-        if cap.isOpened():
-            ok, _frame = cap.read()
-            if ok:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                return cap
-            cap.release()
-            logger.warning(
-                f"HW-accelerated decode '{hw_accel}' opened but returned no "
-                f"frames (known cv2/FFmpeg issue); falling back to software."
-            )
-    except Exception as exc:
-        logger.warning(
-            f"HW-accelerated decode '{hw_accel}' raised {exc}; "
-            f"falling back to software."
-        )
-    return _enable_orientation_auto(cv2.VideoCapture(path))
+            hw_accel = "off"
+    capture = open_ffmpeg_capture(path, hw_accel=hw_accel, input_fps=input_fps)
+    return capture if capture is not None else _ClosedCapture()
+
+
+def open_video_capture(path: str, *, hw_accel: str = "off",
+                       input_fps: float = 24.0):
+    """Public entry point for every reader of a user-supplied video."""
+    return _open_capture(path, hw_accel, input_fps=input_fps)
 
 
 class _PrefetchReader:

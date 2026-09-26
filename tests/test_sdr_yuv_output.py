@@ -327,10 +327,12 @@ class OpenCvDecodeMatrixTests(unittest.TestCase):
 
 @unittest.skipIf(shutil.which("ffmpeg") is None, "ffmpeg not on PATH")
 class PipelineOutputTests(unittest.TestCase):
-    # Luma carries OpenCV's own decode bias of about one level (RM-367);
-    # a wrong inverse matrix costs about seven on these bands.
-    LUMA_CEILING = 2.5
-    CHROMA_CEILING = 1.5
+    # The FFmpeg reader and the inverse agree exactly (RM-348, RM-367): the
+    # bands come back with no luma error and under a level of chroma, where
+    # OpenCV's decode lost 1.15 levels of luma and a wrong inverse matrix
+    # costs about seven.
+    LUMA_CEILING = 0.5
+    CHROMA_CEILING = 1.0
 
     def _run(self, *, hw_encoder=None, full_range=False, checkpoint=False):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -368,8 +370,19 @@ class PipelineOutputTests(unittest.TestCase):
 
     def test_a_wrong_inverse_matrix_is_caught_by_the_same_ceilings(self):
         # Negative control: without it the ceilings above could be loose
-        # enough to pass the colour shift this change removed.
-        with mock.patch("backend.hdr.OPENCV_DECODE_MATRIX", "bt709"):
+        # enough to pass the colour shift this change removed. The capture
+        # decodes these bands with their own BT.709 tag, so an encode that
+        # inverts BT.601 instead is exactly the old mismatch.
+        from backend import hdr
+
+        real = hdr.sdr_yuv_conversion_filter
+
+        def mismatched(meta, codec, **kwargs):
+            kwargs["decode_matrix"] = "bt601"
+            return real(meta, codec, **kwargs)
+
+        with mock.patch.object(
+                hdr, "sdr_yuv_conversion_filter", side_effect=mismatched):
             _stream, error = self._run()
         self.assertGreater(float(error[0]), self.LUMA_CEILING * 2, error)
 
@@ -384,6 +397,34 @@ class PipelineOutputTests(unittest.TestCase):
         self.assertIn(stream["pix_fmt"], {"yuvj420p", "yuv420p"})
         self.assertEqual(stream["color_range"], "pc")
         self._assert_neutral(error)
+
+    def test_full_range_vp9_keeps_its_blacks_and_whites(self):
+        """RM-367: OpenCV read a full-range stream without the yuvj flag as
+        limited range and clipped it to 16..235 before the job began."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            frame = np.zeros((H, W, 3), np.uint8)
+            frame[:, W // 2:] = 255
+            src = tmp / "full.webm"
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt",
+                 "bgr24", "-s", f"{W}x{H}", "-r", "12", "-i", "-", "-vf",
+                 "scale=out_color_matrix=bt709:out_range=pc,format=yuv420p",
+                 "-c:v", "libvpx-vp9", "-lossless", "1", "-colorspace",
+                 "bt709", "-color_range", "pc", str(src)],
+                input=np.stack([frame] * FRAMES).tobytes(),
+                capture_output=True, timeout=120, check=True)
+            self.assertEqual(_probe(src)["pix_fmt"], "yuv420p")
+            output = tmp / "cleaned.mp4"
+            remover = _remover(_config())
+            self.assertTrue(
+                remover.process_video(str(src), str(output)),
+                remover.last_error_message)
+            produced = Path(remover.last_output_path or output)
+            self.assertEqual(_probe(produced)["color_range"], "pc")
+            luma = _planes(produced)[:, 0, : H - 20]
+            self.assertLessEqual(int(luma[:, :, 4: W // 2 - 4].max()), 2)
+            self.assertGreaterEqual(int(luma[:, :, W // 2 + 4: -4].min()), 253)
 
     @unittest.skipUnless(_nvenc_works(), "h264_nvenc is not usable here")
     def test_nvenc_no_longer_writes_rgb_h264(self):

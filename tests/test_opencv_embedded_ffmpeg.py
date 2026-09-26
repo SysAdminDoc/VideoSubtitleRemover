@@ -151,8 +151,13 @@ class ShipDecisionTests(unittest.TestCase):
         self.assertRegex(
             OPENCV_FFMPEG_ACKNOWLEDGEMENT["recorded"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertGreater(len(OPENCV_FFMPEG_ACKNOWLEDGEMENT["reason"]), 80)
-        self.assertTrue(OPENCV_FFMPEG_ACKNOWLEDGEMENT["residualExposure"])
-        self.assertTrue(OPENCV_FFMPEG_ACKNOWLEDGEMENT["tracking"])
+        # RM-348 routed every user-supplied decode off the embedded FFmpeg,
+        # and its acceptance removes the residual-exposure clause. What
+        # replaces it is the gate that keeps it true.
+        self.assertNotIn("residualExposure", OPENCV_FFMPEG_ACKNOWLEDGEMENT)
+        self.assertIn(
+            "OpenCvDecoderHygieneTests",
+            OPENCV_FFMPEG_ACKNOWLEDGEMENT["enforcedBy"])
         self.assertEqual(
             OPENCV_FFMPEG_ACKNOWLEDGEMENT["release"],
             OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE,

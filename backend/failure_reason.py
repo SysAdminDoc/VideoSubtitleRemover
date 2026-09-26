@@ -84,6 +84,8 @@ _REASON_CODES = {
     "no_decodable_frames": REASON_DECODE_FAILED,
     "truncated_decode": REASON_DECODE_FAILED,
     "decoder_seek_failed": REASON_DECODE_FAILED,
+    # The file is fine; the external decoder it needs is not installed.
+    "ffmpeg_missing": REASON_MODEL_MISSING,
     "worker_timeout": REASON_TIMED_OUT,
     "worker_spawn_failed": REASON_WORKER_CRASHED,
     "output_integrity_failed": REASON_OUTPUT_EMPTY,

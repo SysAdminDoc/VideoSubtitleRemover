@@ -373,6 +373,7 @@ class _PipelineMixin:
         self.last_container_payload = {}
         self._color_metadata = None
         self._source_color_probe = None
+        self._decode_colorimetry = ("", "")
         self._output_contract = None
         try:
             _ensure_output_parent(output_path)
@@ -466,6 +467,11 @@ class _PipelineMixin:
             # Stash the decode path so other routines (keyframe, audio merge)
             # can read it without re-resolving.
             self._decode_path = decode_path
+            # The encode inverts exactly the conversion this capture applied.
+            self._decode_colorimetry = (
+                str(getattr(cap, "decode_matrix", "") or ""),
+                str(getattr(cap, "decode_range", "") or ""),
+            )
 
             raw_fps = cap.get(cv2.CAP_PROP_FPS)
             # cv2 returns 0.0 on failure and can return NaN on exotic codecs;

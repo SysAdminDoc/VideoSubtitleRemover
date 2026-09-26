@@ -637,7 +637,9 @@ def _dry_run_plan_for(remover, config, inp: str, video_exts) -> dict:
             plan["warnings"].append(f"detection failed: {exc}")
         return plan
 
-    cap = _cv2.VideoCapture(inp)
+    from backend.io import open_video_capture
+
+    cap = open_video_capture(inp)
     try:
         if not cap.isOpened():
             plan["warnings"].append("could not open video")
@@ -1432,8 +1434,9 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
         if not args.input:
             print("--auto-lang-probe requires -i <input file>", file=sys.stderr)
             sys.exit(1)
-        import cv2 as _cv2
-        cap = _cv2.VideoCapture(args.input)
+        from backend.io import open_video_capture
+
+        cap = open_video_capture(args.input)
         try:
             ok, frame = cap.read()
         finally:

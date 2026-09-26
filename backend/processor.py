@@ -562,6 +562,7 @@ class SubtitleRemover(
         # to preserve HDR / BT.2020 tagging on the output.
         self._color_metadata = None
         self._source_color_probe = None
+        self._decode_colorimetry = ("", "")
         self._output_contract = None
         self._hdr_codec_warning_logged = False
         self._hdr_software_warning_logged = False

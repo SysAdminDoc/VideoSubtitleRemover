@@ -4,11 +4,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- Every video you give VSR is now decoded by the FFmpeg you installed, never by the copy of FFmpeg 7.1 built into OpenCV. That older copy predates the fixes for this year's FFmpeg advisories, and until now it read every source clip, the previews, donor clips and imported mattes. It now only reads files VSR wrote itself, and a test fails the build if another use appears. The trade-off is that videos can't be read at all without FFmpeg (still images still work), where before they were processed without their audio.
+
 ### Changed
 
 - The README's speed table now has numbers a download decision can rest on: a 720p, twelve-second clip run with automatic detection on both the CPU and NVIDIA builds, beside the old 160x96 fixture that only proved which provider loaded. The first measurement had both builds at about 1.1 frames per second, which is how the OCR problem below came to light. Every measured clip now has its licence recorded next to the evidence.
 
 ### Fixed
+
+- Parts of a frame the job never touched now come back as they went in. OpenCV's decoder rounded every pixel about one level darker and ignored the file's own colour settings: it read everything as BT.601, and it read full-range VP9 as limited range, clipping its blacks and whites before the job began. The new decoder uses the colour settings the file declares and the final encode inverts exactly that conversion, so on flat test colours the untouched area now matches the source to within a hundredth of a level.
 
 - The NVIDIA build now runs OCR on the graphics card. Asking for a CUDA device left the text detector on the CPU, so the one kind of AI work every automatic run does never touched the card the 2 GB download exists for. On the 720p benchmark clip the NVIDIA build now runs about 1.85 times faster than the CPU build (2.08 against 1.12 frames per second), where before it was no faster at all. If the card can't be used, OCR falls back to the CPU and the run's execution report says exactly why.
 

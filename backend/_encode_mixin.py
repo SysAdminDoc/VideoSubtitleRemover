@@ -167,9 +167,12 @@ class _EncodeMixin:
         if meta is None:
             return ""
         from backend.hdr import sdr_yuv_conversion_filter
+        decode_matrix, decode_range = (
+            getattr(self, "_decode_colorimetry", None) or ("", ""))
         return sdr_yuv_conversion_filter(
             meta, codec, hardware=hardware,
-            preserve_tags=bool(self.config.preserve_color_metadata))
+            preserve_tags=bool(self.config.preserve_color_metadata),
+            decode_matrix=decode_matrix, decode_range=decode_range)
 
     def _source_is_hdr(self) -> bool:
         meta = getattr(self, "_color_metadata", None)

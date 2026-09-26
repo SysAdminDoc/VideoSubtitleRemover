@@ -524,9 +524,9 @@ def ffmpeg_status_summary(state) -> dict:
                 "short": tr("FFmpeg broken"),
                 "status": tr("FFmpeg did not run"),
                 "warning": tr(
-                    "An FFmpeg was found but it did not run, so outputs will "
-                    "be saved without original audio. Reinstall it from a "
-                    "stable {floor} or newer release build."
+                    "An FFmpeg was found but it did not run, so videos can't "
+                    "be read. Reinstall it from a stable {floor} or newer "
+                    "release build. Still images work without it."
                 ).format(floor=floor),
                 "tone": "warning",
                 "available": False,
@@ -536,8 +536,9 @@ def ffmpeg_status_summary(state) -> dict:
             "short": tr("No FFmpeg"),
             "status": tr("FFmpeg missing"),
             "warning": tr(
-                "FFmpeg is not available, so outputs will be saved without "
-                "original audio until it is installed."),
+                "FFmpeg is not installed, so videos can't be read. Install "
+                "FFmpeg {floor} or newer. Still images work without it."
+            ).format(floor=floor),
             "tone": "warning",
             "available": False,
             "safe": False,

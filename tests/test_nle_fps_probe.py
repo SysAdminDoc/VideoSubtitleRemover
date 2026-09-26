@@ -32,7 +32,10 @@ class ProbeVideoFpsTests(unittest.TestCase):
                 mock.patch.object(vsr_io, "run_process", return_value=_proc(payload)):
             self.assertAlmostEqual(vsr_io.probe_video_fps("clip.mp4"), 25.0)
 
-    def test_falls_back_to_opencv_when_ffprobe_absent(self):
+    def test_never_falls_back_to_opencv_when_ffprobe_absent(self):
+        # RM-348: OpenCV's embedded FFmpeg predates the security floor, so
+        # a missing ffprobe is reported as "probe failed", not papered over
+        # by parsing the user's file with it.
         fake_cap = mock.Mock()
         fake_cap.isOpened.return_value = True
         fake_cap.get.return_value = 59.94
@@ -42,8 +45,8 @@ class ProbeVideoFpsTests(unittest.TestCase):
         )
         with mock.patch.object(vsr_io.shutil, "which", return_value=None), \
                 mock.patch.dict("sys.modules", {"cv2": fake_cv2}):
-            self.assertAlmostEqual(vsr_io.probe_video_fps("clip.mp4"), 59.94)
-        fake_cap.release.assert_called_once()
+            self.assertIsNone(vsr_io.probe_video_fps("clip.mp4"))
+        fake_cv2.VideoCapture.assert_not_called()
 
     def test_returns_none_when_all_probes_fail(self):
         fake_cap = mock.Mock()

@@ -35,6 +35,7 @@ from backend.mask_corrections import (
 )
 from backend.region_editing import RegionEditHistory
 from backend.safe_image import safe_imread
+from backend.io import open_video_capture
 from gui.config import ProcessingStatus, QueueItem, save_queue_state
 from gui.dialog_layout import (
     fit_dialog_to_work_area,
@@ -92,7 +93,7 @@ class MaskCorrectionWindow:
 
             self.is_video = is_video_file(self.item.file_path)
             if self.is_video:
-                self.cap = cv2.VideoCapture(self.item.file_path)
+                self.cap = open_video_capture(self.item.file_path)
                 if not self.cap.isOpened():
                     raise ValueError(tr("The source video could not be opened"))
                 self.frame_count = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))

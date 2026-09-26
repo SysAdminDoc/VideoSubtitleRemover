@@ -27,23 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 def probe_video_metadata(video_path: str) -> Dict[str, Any]:
-    """Return lightweight stream metadata for preview planning."""
-    try:
-        import cv2
-    except ImportError:
-        return {}
+    """Return lightweight stream metadata for preview planning.
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        cap.release()
+    Read by ffprobe, because this also runs on the user's source clip and
+    RM-348 keeps user media away from OpenCV's embedded FFmpeg.
+    """
+    from backend.io import _probe_video_stream
+
+    stream = _probe_video_stream(video_path)
+    if not stream or stream["width"] <= 0 or stream["height"] <= 0:
         return {}
-    try:
-        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-    finally:
-        cap.release()
+    fps = float(stream["fps"] or 0.0)
+    frame_count = int(stream["frameCount"] or 0)
+    width = int(stream["width"])
+    height = int(stream["height"])
     if fps <= 0.0:
         fps = 30.0
     duration = frame_count / fps if frame_count else 0.0

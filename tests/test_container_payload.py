@@ -100,14 +100,30 @@ class ContainerPayloadPlanTests(unittest.TestCase):
         self.assertTrue(manifest["available"])
         self.assertEqual(manifest["rotationDegrees"], 270)
 
-    def test_opencv_capture_enables_orientation_auto(self):
-        cap = mock.Mock()
-        with mock.patch("backend.io.cv2.VideoCapture", return_value=cap):
+    def test_capture_reports_the_rotated_size(self):
+        # RM-348: user media no longer opens through cv2.VideoCapture, whose
+        # CAP_PROP_ORIENTATION_AUTO this used to check. FFmpeg rotates by the
+        # display matrix itself, so the capture must report the size that
+        # actually arrives: rotation stays a decoded-pixel property.
+        payload = {
+            "streams": [{
+                "width": 1920, "height": 1080, "avg_frame_rate": "30/1",
+                "nb_frames": "10", "pix_fmt": "yuv420p",
+                "side_data_list": [
+                    {"side_data_type": "Display Matrix", "rotation": -90}],
+            }],
+            "format": {"duration": "0.333"},
+        }
+        completed = mock.Mock(returncode=0, stdout=json.dumps(payload), stderr="")
+        with mock.patch("backend.io.shutil.which", return_value="ffmpeg"), mock.patch(
+            "backend.io.run_process", return_value=completed
+        ):
             opened = io._open_capture("rotated.mp4", "off")
-        self.assertIs(opened, cap)
-        prop = getattr(io.cv2, "CAP_PROP_ORIENTATION_AUTO", None)
-        if prop is not None:
-            cap.set.assert_called_with(prop, 1)
+        self.assertEqual(
+            (opened.get(io.cv2.CAP_PROP_FRAME_WIDTH),
+             opened.get(io.cv2.CAP_PROP_FRAME_HEIGHT)),
+            (1080.0, 1920.0),
+        )
 
     def test_output_contract_fails_closed_on_unpreserved_payload(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)

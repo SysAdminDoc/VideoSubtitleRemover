@@ -25,9 +25,10 @@ ROOT = Path(__file__).resolve().parent.parent
 # and not re-raised; each one is a place the product could be hiding
 # something from the user.
 BUDGET = {
-    "BLE001": 537,
-    # RM-338 narrowed one; lowered on purpose, never raised.
-    "S110": 126,
+    # RM-348 removed the OpenCV fallbacks that swallowed decode errors.
+    "BLE001": 530,
+    # RM-338 narrowed one, RM-348 two; lowered on purpose, never raised.
+    "S110": 124,
 }
 
 # These have no budget: the count is zero and must stay there.

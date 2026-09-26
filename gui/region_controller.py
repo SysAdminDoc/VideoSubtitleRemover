@@ -35,6 +35,7 @@ from backend.region_keyframes import (
     region_shapes_at,
 )
 from backend.safe_image import safe_imread
+from backend.io import open_video_capture
 from gui.config import (
     ProcessingConfig,
     _coerce_region_span_list,
@@ -121,7 +122,7 @@ class RegionSelectorWindow:
         self._cv2 = _cv2
 
         self.is_video = is_video_file(source_path)
-        self.cap = _cv2.VideoCapture(source_path) if self.is_video else None
+        self.cap = open_video_capture(source_path) if self.is_video else None
         if self.is_video and not self.cap.isOpened():
             logger.error("Could not open video for region selection")
             self.cap.release()
@@ -1483,7 +1484,7 @@ class RegionSelectorWindow:
         """Reject a donor the run would only fail on later."""
         import cv2
 
-        capture = cv2.VideoCapture(str(path))
+        capture = open_video_capture(str(path))
         try:
             if not capture.isOpened():
                 self._update_status(

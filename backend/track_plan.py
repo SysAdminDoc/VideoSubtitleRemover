@@ -32,7 +32,11 @@ from backend.detection_geometry import (
     as_detection_geometry,
     expand_polygon_local,
 )
-from backend.io import _probe_video_frame_timing, timing_ticks_digest
+from backend.io import (
+    _probe_video_frame_timing,
+    open_video_capture,
+    timing_ticks_digest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -308,7 +312,7 @@ def scan_track_plan(
     frame_timing = (
         _probe_video_frame_timing(str(source)) if source.is_file() else None
     )
-    cap = cv2.VideoCapture(str(source))
+    cap = open_video_capture(str(source))
     if not cap.isOpened():
         raise ValueError(f"could not open video: {source}")
     try:
@@ -436,7 +440,7 @@ def scan_track_plan(
 
 
 def _attach_thumbnails(source: Path, tracks: List[dict]) -> None:
-    cap = cv2.VideoCapture(str(source))
+    cap = open_video_capture(str(source))
     if not cap.isOpened():
         for track in tracks:
             track["thumbnail_png_base64"] = ""

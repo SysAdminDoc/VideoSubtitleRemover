@@ -21,6 +21,7 @@ from backend.io import (
     _promote_temp_output,
     _seconds_to_ticks,
     _ticks_to_seconds,
+    open_video_capture,
     timing_ticks_digest,
     _write_text_atomic,
 )
@@ -608,7 +609,7 @@ class MaskInterchangeReader:
             return
         if not self.artifact_path.is_file():
             raise ValueError("Imported FFV1 matte video is missing")
-        capture = cv2.VideoCapture(str(self.artifact_path))
+        capture = open_video_capture(str(self.artifact_path))
         try:
             if not capture.isOpened():
                 raise ValueError("Imported FFV1 matte video could not be opened")
@@ -640,7 +641,7 @@ class MaskInterchangeReader:
                 raise ValueError(f"Imported matte frame {index} became unreadable")
             return _coerce_gray_u8(frame, self.width, self.height)
         if self._capture is None:
-            self._capture = cv2.VideoCapture(str(self.artifact_path))
+            self._capture = open_video_capture(str(self.artifact_path))
             self._capture_position = 0
         if index != self._capture_position:
             self._capture.set(cv2.CAP_PROP_POS_FRAMES, index)
@@ -676,7 +677,7 @@ def load_matte_preview_frame(
         frame = safe_imread(
             artifact / f"frame_{index:08d}.png", cv2.IMREAD_UNCHANGED)
     else:
-        capture = cv2.VideoCapture(str(artifact))
+        capture = open_video_capture(str(artifact))
         try:
             capture.set(cv2.CAP_PROP_POS_FRAMES, index)
             ok, frame = capture.read()

@@ -56,12 +56,15 @@ class FfmpegStatusSummaryTests(unittest.TestCase):
         self.assertIn(self.FLOOR, summary["warning"])
         self.assertNotIn("ready", summary["status"].lower())
 
-    def test_a_missing_binary_says_audio_will_be_dropped(self):
+    def test_a_missing_binary_says_videos_cannot_be_read(self):
+        # RM-348: videos are decoded by the external FFmpeg only, so its
+        # absence stops video work rather than just dropping the audio.
         summary = ffmpeg_status_summary(_state("", available=False))
         self.assertFalse(summary["safe"])
         self.assertFalse(summary["available"])
         self.assertEqual(summary["tone"], "warning")
-        self.assertIn("without original audio", summary["warning"])
+        self.assertIn("videos can't be read", summary["warning"])
+        self.assertIn("Still images work", summary["warning"])
 
     def test_an_empty_probe_result_is_treated_as_missing(self):
         for value in (None, {}):
@@ -117,7 +120,7 @@ class BrokenBinaryTests(unittest.TestCase):
         self.assertFalse(broken["safe"])
         self.assertEqual(broken["tone"], "warning")
         self.assertIn("did not run", broken["status"])
-        self.assertIn("without original audio", broken["warning"])
+        self.assertIn("videos can't be read", broken["warning"])
 
         missing = ffmpeg_status_summary({"available": False, "onPath": False})
         self.assertNotIn("did not run", missing["status"])

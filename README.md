@@ -260,7 +260,7 @@ newest 2.4.x line supporting Python 3.11, while NumPy 2.5.x requires Python
 3.12 or newer. Keep the Python 3.11 floor and NumPy ceiling paired until the
 next coordinated dependency review.
 
-### FFmpeg (Required for audio)
+### FFmpeg (Required)
 
 ```powershell
 winget install ffmpeg
@@ -277,6 +277,8 @@ Older branches are outside VSR's reviewed support policy; development
 snapshots and future branches remain unknown until explicitly classified.
 The self-test, support bundle, and strict release validation block
 vulnerable, outdated, unsupported, and unknown runtimes.
+
+Every video you give VSR is decoded by this FFmpeg, donor clips and imported mattes included. OpenCV's wheel carries its own FFmpeg 7.1, which predates the fixes above, so it only ever reads files VSR wrote itself: the output it just encoded, its preview proxy, its exported mask, and adapter outputs. A test fails the build if any other OpenCV decode appears. Without FFmpeg, still images still work but videos can't be read.
 
 **Build toolchain floors:** the local build requires **PyInstaller >= 6.22.2**
 and the installer requires **NSIS >= 3.12** (elevated Low IL temp-directory

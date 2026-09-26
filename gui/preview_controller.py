@@ -35,6 +35,7 @@ from backend.i18n import N_, tr
 from backend.detection_geometry import DetectionGeometry
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
+from backend.io import open_video_capture
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def _read_video_frames_at_indices(video_path: str, frame_indices):
     """Read selected full-resolution source frames for preview rendering."""
     import cv2
 
-    cap = cv2.VideoCapture(video_path)
+    cap = open_video_capture(video_path)
     if not cap.isOpened():
         cap.release()
         return []
@@ -628,9 +629,8 @@ class PreviewControllerMixin:
 
         def _probe():
             try:
-                import cv2 as _cv2
                 if is_video_file(source):
-                    cap = _cv2.VideoCapture(source)
+                    cap = open_video_capture(source)
                     try:
                         ok, frame = cap.read()
                     finally:
@@ -708,8 +708,8 @@ class PreviewControllerMixin:
             return
 
         import cv2 as _cv2
-        cap_a = _cv2.VideoCapture(in_path)
-        cap_b = _cv2.VideoCapture(out_path)
+        cap_a = open_video_capture(in_path)
+        cap_b = open_video_capture(out_path)
         if not cap_a.isOpened() or not cap_b.isOpened():
             cap_a.release()
             cap_b.release()
@@ -1169,7 +1169,7 @@ class PreviewControllerMixin:
             import cv2 as _cv2
 
             if is_video_file(item.file_path):
-                cap = _cv2.VideoCapture(item.file_path)
+                cap = open_video_capture(item.file_path)
                 try:
                     ret, frame = cap.read()
                     if not ret:
@@ -1268,7 +1268,7 @@ class PreviewControllerMixin:
             if is_image_file(item.file_path):
                 raw_frame = safe_imread(item.file_path)
             elif is_video_file(item.file_path):
-                cap = _cv2.VideoCapture(item.file_path)
+                cap = open_video_capture(item.file_path)
                 try:
                     if cap.isOpened():
                         ok, frame = cap.read()
@@ -1542,7 +1542,7 @@ class PreviewControllerMixin:
                 if is_image_file(path):
                     return safe_imread(path)
                 elif is_video_file(path):
-                    cap = _cv2.VideoCapture(path)
+                    cap = open_video_capture(path)
                     try:
                         fps = float(cap.get(_cv2.CAP_PROP_FPS) or 30.0)
                         if fps <= 0.0:

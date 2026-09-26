@@ -181,7 +181,7 @@ class ScanIntegrationTests(unittest.TestCase):
                 return None
 
         config = types.SimpleNamespace(remove_subtitles=remove_subtitles)
-        with mock.patch.object(track_plan.cv2, "VideoCapture", _Capture),              mock.patch.object(track_plan, "_probe_video_frame_timing",
+        with mock.patch.object(track_plan, "open_video_capture", _Capture),              mock.patch.object(track_plan, "_probe_video_frame_timing",
                                return_value=None),              mock.patch.object(track_plan, "_attach_thumbnails",
                                lambda *a, **k: None):
             return track_plan.scan_track_plan(

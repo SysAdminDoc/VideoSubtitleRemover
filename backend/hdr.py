@@ -554,9 +554,11 @@ def hdr_pixel_format_args(
 # unless the decoder reports a yuvj format (full-range H.264 and HEVC do,
 # full-range VP9 does not). Measured on OpenCV 5.0.0 on 2026-09-26 against
 # bt709, bt470bg and untagged H.264 and full-range H.264, HEVC and VP9. The
-# final encode has to invert that exact conversion and only *tag* the
-# source's matrix and range: converting with the tagged matrix instead
-# shifts the colour of every pixel the job never touched.
+# final encode has to invert the conversion the frames were decoded with
+# and only *tag* the source's matrix and range: converting with a different
+# matrix shifts the colour of every pixel the job never touched. RM-348's
+# FFmpeg reader reports its own conversion; this is the fallback for a
+# capture that does not, which is how OpenCV behaves.
 OPENCV_DECODE_MATRIX = "bt601"
 
 
@@ -597,6 +599,8 @@ def sdr_yuv_conversion_filter(
     *,
     hardware: bool = False,
     preserve_tags: bool = True,
+    decode_matrix: str = "",
+    decode_range: str = "",
 ) -> str:
     """-vf chain that returns the pipeline's BGR frames to the source's YUV.
 
@@ -604,6 +608,10 @@ def sdr_yuv_conversion_filter(
     the RGB frames as they are and writes RGB H.264 that most players cannot
     decode, and libx264 writes High 4:4:4 from a 4:2:0 source. Empty for HDR
     sources, which have their own 10-bit path, and for RGB or unknown ones.
+
+    ``decode_matrix`` and ``decode_range`` are the conversion the capture
+    reports it applied (RM-348's FFmpeg reader uses the file's own tags);
+    without them the frames are assumed to come from OpenCV's decoder.
 
     The trailing setparams relabels the converted frames with the source's
     tags without touching a pixel. It is not cosmetic: FFmpeg 9 negotiates
@@ -626,7 +634,8 @@ def sdr_yuv_conversion_filter(
         target = "yuv420p"  # libsvtav1 is 4:2:0 only
     else:
         target = {"422": "yuv422p", "444": "yuv444p"}.get(layout, "yuv420p")
-    decoded_range = (
+    decoded_matrix = decode_matrix or OPENCV_DECODE_MATRIX
+    decoded_range = decode_range if decode_range in {"tv", "pc"} else (
         "pc" if str(meta.pixel_format or "").lower().startswith("yuvj")
         else "tv"
     )
@@ -640,7 +649,7 @@ def sdr_yuv_conversion_filter(
     # accurate_rnd: swscale's fast RGB-to-4:2:0 path rounds luma half a
     # level darker again on top of whatever the decode already lost.
     return (
-        f"scale=out_color_matrix={OPENCV_DECODE_MATRIX}:"
+        f"scale=out_color_matrix={decoded_matrix}:"
         f"out_range={decoded_range}:flags=accurate_rnd,format={target},"
         f"setparams=colorspace={matrix_tag}:range={range_tag}"
     )

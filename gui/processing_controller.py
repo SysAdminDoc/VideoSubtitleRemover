@@ -31,6 +31,7 @@ from backend import keep_awake
 from backend.i18n import N_, tr
 from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
+from backend.io import open_video_capture
 from gui.failure_copy import (
     MSG_CANCELLED,
     MSG_COMPLETE,
@@ -92,11 +93,12 @@ class ProcessingControllerMixin:
 
         self._apply_current_settings_to_idle_items()
         self._preflight_free_space_check()
-        if self.preserve_audio_var.get() and not self.ffmpeg_ready:
+        if not self.ffmpeg_ready:
             has_video = any(is_video_file(item.file_path) for item in self.queue)
             if has_video:
+                # RM-348: videos are decoded by the external FFmpeg only.
                 self._update_status(
-                    N_("FFmpeg is missing, so video outputs will be saved without original audio."),
+                    N_("FFmpeg is missing, so the videos in the queue can't be read. Still images will process."),
                     "warning",
                     toast=True,
                 )
@@ -1361,7 +1363,7 @@ class ProcessingControllerMixin:
             return 0.0
         try:
             import cv2 as _cv2
-            cap = _cv2.VideoCapture(first_video.file_path)
+            cap = open_video_capture(first_video.file_path)
             try:
                 if not cap.isOpened():
                     return 0.0

@@ -389,21 +389,23 @@ OPENCV_FFMPEG_ADVISORY_RULES: Tuple[Mapping[str, object], ...] = (
 # fails until somebody looks at it again.
 OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE = "7.1"
 OPENCV_FFMPEG_ACKNOWLEDGEMENT: Mapping[str, str] = {
-    "recorded": "2026-08-28",
+    "recorded": "2026-09-26",
     "release": OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE,
     "wheel": "opencv-python==5.0.0.93",
     "reason": (
         "opencv-python pins its own FFmpeg at n7.1 and publishes no wheel "
         "built against the 9.0 branch, so this cannot be fixed by pinning. "
-        "Every decode the product performs on user-supplied media is being "
-        "moved onto the external FFmpeg binary, which does meet the floor; "
-        "until that is finished the embedded decoder remains reachable from "
-        "the preview, region-selection, and mask-correction paths."
+        "Since RM-348 no user-supplied media reaches it: every video a user "
+        "hands the product, imported mattes and donor clips included, is "
+        "decoded by the external FFmpeg binary, which meets the floor. The "
+        "remaining OpenCV decodes read files the product itself wrote: the "
+        "output it just encoded, its preview proxy, its exported mask, "
+        "adapter outputs, and the reference corpus."
     ),
-    "residualExposure": (
-        "cv2.VideoCapture calls that still open user-supplied media"
+    "enforcedBy": (
+        "tests/test_ffmpeg_capture.py OpenCvDecoderHygieneTests, which "
+        "fails on any cv2.VideoCapture call outside its allowlist"
     ),
-    "tracking": "ROADMAP.md RM-348",
 }
 
 
