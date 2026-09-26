@@ -224,15 +224,16 @@ class ConversionChoiceTests(unittest.TestCase):
         # OpenCV decodes a non-yuvj full-range stream as limited, so the
         # inverse is limited too, while the frames keep the source's tags.
         self.assertEqual(chain["scale"]["out_range"], "tv")
-        self.assertEqual(chain["setparams"],
-                         {"colorspace": "bt709", "range": "pc"})
+        self.assertEqual(chain["setparams"], {
+            "colorspace": "bt709", "range": "pc",
+            "color_primaries": "unknown", "color_trc": "unknown"})
         full = _filters(sdr_yuv_conversion_filter(
             ColorMetadata(color_range="pc", pixel_format="yuvj420p"), "h264"))
         self.assertEqual(full["scale"]["out_range"], "pc")
         # Untagged matrix stays untagged; an untagged range describes the
         # data the conversion produced.
-        self.assertEqual(full["setparams"],
-                         {"colorspace": "unknown", "range": "pc"})
+        self.assertEqual(full["setparams"]["colorspace"], "unknown")
+        self.assertEqual(full["setparams"]["range"], "pc")
 
     def test_untagged_output_when_tags_are_not_preserved(self):
         meta = ColorMetadata(color_space="bt709", color_range="tv",
@@ -263,25 +264,25 @@ class EncodeArgumentTests(unittest.TestCase):
     def test_only_rgb_frame_encodes_are_converted(self):
         remover = self._remover()
         converted = remover._get_encode_args(rgb_frames=True)
-        self.assertIn("-vf", converted)
-        chain = _filters(converted[converted.index("-vf") + 1])
+        self.assertIn("-filter:v:0", converted)
+        chain = _filters(converted[converted.index("-filter:v:0") + 1])
         self.assertEqual(chain["format"]["pix_fmt"], "yuv420p")
         # Post-restore passes re-read a finished YUV file and must not be
         # converted a second time.
-        self.assertNotIn("-vf", remover._get_encode_args())
+        self.assertNotIn("-filter:v:0", remover._get_encode_args())
 
     def test_nvenc_gets_nv12_with_the_source_tags(self):
         args = self._remover("h264_nvenc")._get_encode_args(rgb_frames=True)
         self.assertIn("h264_nvenc", args)
-        chain = _filters(args[args.index("-vf") + 1])
+        chain = _filters(args[args.index("-filter:v:0") + 1])
         self.assertEqual(chain["format"]["pix_fmt"], "nv12")
         self.assertEqual(args[args.index("-colorspace") + 1], "bt709")
         self.assertEqual(args[args.index("-color_range") + 1], "tv")
 
     def test_d3d12_chain_starts_with_the_conversion(self):
         args = self._remover("h264_d3d12va")._get_encode_args(rgb_frames=True)
-        self.assertEqual(args.count("-vf"), 1)
-        chain = args[args.index("-vf") + 1]
+        self.assertEqual(args.count("-filter:v:0"), 1)
+        chain = args[args.index("-filter:v:0") + 1]
         self.assertTrue(chain.startswith("scale=out_color_matrix=bt601"), chain)
         self.assertTrue(chain.endswith(",hwupload,scale_d3d12=w=iw:h=ih"), chain)
 
@@ -290,7 +291,7 @@ class EncodeArgumentTests(unittest.TestCase):
         remover._source_color_probe = remover._color_metadata
         remover._color_metadata = None
         args = remover._get_encode_args(rgb_frames=True)
-        self.assertIn("-vf", args)
+        self.assertIn("-filter:v:0", args)
         self.assertNotIn("-colorspace", args)
 
 
@@ -436,6 +437,176 @@ class PipelineOutputTests(unittest.TestCase):
                 self.assertEqual(stream["color_space"], "bt709")
                 self.assertEqual(stream["color_range"], "tv")
                 self._assert_neutral(error)
+
+
+def _tagged_bt709_clip(path: Path) -> Path:
+    """Flat bands tagged the way camera and phone footage is: primaries,
+    transfer, matrix and range all BT.709 limited. setparams puts the tags
+    on the frames; FFmpeg 9 drops -color_primaries/-color_trc otherwise."""
+    frames = np.stack([
+        np.full((H, W, 3), (60 + 2 * index, 120, 200), np.uint8)
+        for index in range(FRAMES)
+    ])
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
+         "-s", f"{W}x{H}", "-r", "12", "-i", "-", "-vf",
+         "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,"
+         "setparams=colorspace=bt709:range=tv:color_primaries=bt709:"
+         "color_trc=bt709",
+         "-c:v", "libx264", "-qp", "0", str(path)],
+        input=frames.tobytes(), capture_output=True, timeout=120, check=True,
+    )
+    return path
+
+
+def _stream_tags(path: Path) -> dict:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=color_primaries,color_transfer,color_space,color_range",
+         "-of", "json", str(path)],
+        capture_output=True, text=True, timeout=30, check=True)
+    return json.loads(result.stdout)["streams"][0]
+
+
+@unittest.skipIf(shutil.which("ffmpeg") is None, "ffmpeg not on PATH")
+class ReviewRegressionTests(unittest.TestCase):
+    """Defects an adversarial review found in the first version of this fix."""
+
+    def test_a_fully_tagged_bt709_source_keeps_every_tag(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = _tagged_bt709_clip(tmp / "camera.mp4")
+            expected = {
+                "color_primaries": "bt709", "color_transfer": "bt709",
+                "color_space": "bt709", "color_range": "tv",
+            }
+            self.assertEqual(_stream_tags(src), expected)
+            for checkpoint in (False, True):
+                with self.subTest(checkpoint=checkpoint):
+                    remover = _remover(_config())
+                    kwargs = {}
+                    if checkpoint:
+                        kwargs = {"checkpoint_dir": tmp / f"ck{checkpoint}",
+                                  "checkpoint_key": "tags"}
+                    output = tmp / f"out_{checkpoint}.mp4"
+                    self.assertTrue(
+                        remover.process_video(str(src), str(output), **kwargs),
+                        remover.last_error_message)
+                    self.assertEqual(
+                        _stream_tags(Path(remover.last_output_path or output)),
+                        expected)
+
+    def test_cover_art_and_soft_subtitles_survive_the_conversion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            srt = tmp / "subs.srt"
+            srt.write_text(
+                "1\n00:00:00,000 --> 00:00:00,500\nHello\n\n", encoding="utf-8")
+            cover = tmp / "cover.png"
+            import cv2
+
+            cv2.imwrite(str(cover), np.full((32, 32, 3), 200, np.uint8))
+            video = _tagged_bt709_clip(tmp / "video.mp4")
+            src = tmp / "full.mp4"
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-i", str(video),
+                 "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                 "-i", str(srt), "-i", str(cover),
+                 "-map", "0:v", "-map", "1:a", "-map", "2:s", "-map", "3:v",
+                 "-c:v:0", "copy", "-c:a", "aac", "-c:s", "mov_text",
+                 "-c:v:1", "png", "-disposition:v:1", "attached_pic",
+                 "-t", "1", str(src)],
+                capture_output=True, timeout=120, check=True)
+            kinds = json.loads(subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+                 "-of", "json", str(src)],
+                capture_output=True, text=True, timeout=30,
+                check=True).stdout)["streams"]
+            self.assertEqual(
+                sorted(item["codec_type"] for item in kinds),
+                ["audio", "subtitle", "video", "video"])
+            remover = _remover(_config(preserve_audio=True))
+            output = tmp / "out.mp4"
+            self.assertTrue(
+                remover.process_video(str(src), str(output)),
+                remover.last_error_message)
+            streams = json.loads(subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries",
+                 "stream=codec_type:stream_disposition=attached_pic",
+                 "-of", "json", str(Path(remover.last_output_path or output))],
+                capture_output=True, text=True, timeout=30,
+                check=True).stdout)["streams"]
+            kinds = [item["codec_type"] for item in streams]
+            self.assertIn("audio", kinds)
+            self.assertIn("subtitle", kinds)
+            self.assertTrue(any(
+                (item.get("disposition") or {}).get("attached_pic")
+                for item in streams), streams)
+
+    def test_a_gray_source_keeps_its_luma(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            values = (16, 60, 180, 235)
+            frame = np.zeros((H, W), np.uint8)
+            for band, value in enumerate(values):
+                frame[:, band * BAND_W:(band + 1) * BAND_W] = value
+            src = tmp / "gray.mkv"
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt",
+                 "gray", "-s", f"{W}x{H}", "-r", "12", "-i", "-",
+                 "-c:v", "ffv1", str(src)],
+                input=np.stack([frame] * FRAMES).tobytes(),
+                capture_output=True, timeout=120, check=True)
+            remover = _remover(_config())
+            output = tmp / "out.mp4"
+            self.assertTrue(
+                remover.process_video(str(src), str(output)),
+                remover.last_error_message)
+            luma = _planes(Path(remover.last_output_path or output))[:, 0]
+            for band, value in enumerate(values):
+                inner = luma[:, 4:H - 20, band * BAND_W + 4:(band + 1) * BAND_W - 4]
+                with self.subTest(value=value):
+                    self.assertLessEqual(
+                        abs(float(inner.mean()) - value), 1.0, inner.mean())
+
+    def test_an_integrity_retry_stays_a_stream_copy(self):
+        """A contract-ready file retried after a failed promotion must not
+        be re-encoded through the BGR inverse (a second conversion)."""
+        from backend.processor import OutputIntegrityError
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = _tagged_bt709_clip(tmp / "src.mp4")
+            remover = _remover(_config(), hw_encoder="h264_nvenc")
+            remover._color_metadata = ColorMetadata(
+                color_space="bt709", color_range="tv", pixel_format="yuv420p")
+            remover._output_contract = None
+            remover._decode_colorimetry = ("bt709", "tv")
+            commands = []
+            promotions = iter([OutputIntegrityError("truncated", {}), None])
+
+            def promote(*_args, **_kwargs):
+                outcome = next(promotions)
+                if outcome is not None:
+                    raise outcome
+
+            with mock.patch.object(
+                    remover, "_run_checked_ffmpeg",
+                    side_effect=lambda cmd, _timeout: commands.append(list(cmd))), \
+                    mock.patch.object(remover, "_promote_video_output",
+                                      side_effect=promote), \
+                    mock.patch.object(remover, "_fallback_after_hw_failure",
+                                      return_value=True), \
+                    mock.patch("backend._encode_mixin.validate_container_payload",
+                               return_value={}):
+                remover._merge_audio(
+                    str(src), str(src), str(tmp / "out.mp4"),
+                    video_is_contract_ready=True)
+            self.assertEqual(len(commands), 2)
+            for command in commands:
+                self.assertEqual(
+                    command[command.index("-c:v") + 1], "copy", command)
+                self.assertNotIn("-filter:v:0", command)
 
 
 if __name__ == "__main__":

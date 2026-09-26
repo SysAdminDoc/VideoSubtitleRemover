@@ -201,7 +201,18 @@ class OutputContract:
                     continue
                 if value in {"unknown", "unspecified"}:
                     continue
-                if value and getattr(actual, attr, "") != value:
+                found = getattr(actual, attr, "")
+                if (
+                    attr == "color_range"
+                    and value == "tv"
+                    and found in {"", "unknown", "unspecified"}
+                ):
+                    # Limited range is the codec default. x264 leaves it
+                    # unsignalled when no colour description accompanies it,
+                    # and MP4 then writes no colr box, so an output that
+                    # says nothing about range is limited range.
+                    continue
+                if value and found != value:
                     issues.append(f"{label} is not preserved")
             if expected.mastering_display and (
                 actual is None

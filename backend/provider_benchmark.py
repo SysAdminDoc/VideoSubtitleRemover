@@ -343,6 +343,40 @@ def _runtime_provider_facts(device: str) -> dict:
     return facts
 
 
+def _pipeline_facts(remover) -> dict:
+    """What the pipeline itself ran on, as opposed to the probe session.
+
+    ``runtime`` above comes from a separate one-node session, so it says
+    the CUDA provider can load, not that the product used it: the 720p
+    evidence of 2026-09-26 reported CUDA active while OCR ran on the CPU.
+    These are read back from the run's own execution provenance.
+    """
+    facts: dict = {
+        "detection": dict(getattr(remover, "last_detection_stats", None) or {}),
+    }
+    try:
+        stages = remover.execution_provenance.to_dict().get("stages") or {}
+    except (AttributeError, TypeError, ValueError):
+        logger.warning("Benchmark could not read execution provenance",
+                       exc_info=True)
+        stages = {}
+    for name in ("ocr", "inpaint"):
+        stage = stages.get(name) or {}
+        facts[name] = {
+            "engine": str(stage.get("engine") or ""),
+            "provider": str(stage.get("provider") or ""),
+            "effectiveDevice": str(stage.get("effectiveDevice") or ""),
+            "fellBack": bool(stage.get("fellBack")),
+            "fallbackReason": str(stage.get("fallbackReason") or ""),
+            "executions": sum(
+                int(item.get("executionCount") or 0)
+                for item in stage.get("actualExecutions") or []
+                if isinstance(item, Mapping)
+            ),
+        }
+    return facts
+
+
 def manifest_config_for(clip_path: Path | str,
                         manifest_path: Path | str | None = None) -> dict:
     """Return the reviewed config the corpus uses for this clip, if listed.
@@ -463,6 +497,8 @@ def run_provider_benchmark(
                 "outputFrames": digest,
                 "error": str(remover.last_error_message or ""),
             })
+            if index == 0:
+                evidence["pipeline"] = _pipeline_facts(remover)
             if not ok:
                 evidence["errors"].append(
                     f"{label} run failed: {remover.last_error_message}")

@@ -1700,7 +1700,7 @@ class _FfmpegCapture:
     size, rate, count and position.
 
     ``decode_matrix`` and ``decode_range`` record the Y'CbCr conversion this
-    reader applied (empty for RGB and gray sources), so the final encode can
+    reader applied (empty for RGB sources), so the final encode can
     invert exactly that conversion rather than guess it.
     """
 
@@ -2071,15 +2071,20 @@ def _sdr_decode_colorimetry(stream: dict) -> Tuple[str, str]:
     The tagged matrix and range where the file states them: OpenCV ignored
     both, decoding everything as BT.601 and every non-yuvj stream as limited
     range, which clipped full-range VP9 outright. Untagged sources keep
-    FFmpeg's own defaults. Empty strings for RGB and gray sources, which
-    carry no matrix.
+    FFmpeg's own defaults. Empty strings for RGB sources, which carry no
+    matrix.
     """
     pixel_format = str(stream.get("pixelFormat") or "").lower()
+    tagged_range = str(stream.get("colorRange") or "").lower()
+    if pixel_format.startswith("gray"):
+        # swscale reads GRAY8 as full range unless the file says otherwise;
+        # the matrix is irrelevant with no chroma, but naming the range
+        # keeps the decode explicit and the encode's inverse exact.
+        return "bt601", tagged_range if tagged_range in {"tv", "pc"} else "pc"
     if not pixel_format.startswith(("yuv", "nv", "p0", "p2", "p4")):
         return "", ""
     matrix = _SWS_MATRIX_FOR_TAG.get(
         str(stream.get("colorSpace") or "").lower(), "bt601")
-    tagged_range = str(stream.get("colorRange") or "").lower()
     if tagged_range in {"tv", "pc"}:
         return matrix, tagged_range
     return matrix, "pc" if pixel_format.startswith("yuvj") else "tv"

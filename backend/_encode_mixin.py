@@ -74,6 +74,12 @@ class _EncodeMixin:
         explicit conversion back to the source's YUV layout; encodes that
         read an already finished YUV file must not, or it would be converted
         a second time with the wrong matrix.
+
+        Filters are scoped to output video stream 0 (``-filter:v:0``). The
+        container merge also maps stream-copied video such as cover art, and
+        a plain ``-vf`` applies to that too; FFmpeg then refuses the whole
+        command ("Filtering and streamcopy cannot be used together") and the
+        retry drops the subtitles and cover art.
         """
         codec = self._effective_output_codec()
         hdr_mode = self._source_is_hdr()
@@ -107,7 +113,7 @@ class _EncodeMixin:
             )
             if self._hw_encoder.endswith("_d3d12va"):
                 base = [
-                    "-vf",
+                    "-filter:v:0",
                     (convert or "format=nv12") + ",hwupload,scale_d3d12=w=iw:h=ih",
                     "-c:v", self._hw_encoder,
                     "-bf", "0", "-async_depth", "1",
@@ -127,7 +133,7 @@ class _EncodeMixin:
                 base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                         '-preset', 'medium']
             if convert and not self._hw_encoder.endswith("_d3d12va"):
-                base += ["-vf", convert]
+                base += ["-filter:v:0", convert]
             return (
                 base
                 + self._hdr_pixel_format_args(codec, hardware=True)
@@ -147,7 +153,7 @@ class _EncodeMixin:
                     '-preset', 'medium']
         convert = self._sdr_conversion_filter(codec) if rgb_frames else ""
         if convert:
-            base += ["-vf", convert]
+            base += ["-filter:v:0", convert]
         return (
             base
             + self._hdr_pixel_format_args(codec)
@@ -761,6 +767,10 @@ class _EncodeMixin:
                         time_base_den=time_base_den,
                         _include_auxiliary=_include_auxiliary,
                         _force_audio_transcode=_force_audio_transcode,
+                        # Dropping this re-encoded a finished YUV file as if
+                        # it were the pipeline's BGR frames: a second colour
+                        # conversion on every pixel.
+                        video_is_contract_ready=video_is_contract_ready,
                     )
                 logger.warning(
                     "Audio merge produced a truncated/invalid output (%s); "

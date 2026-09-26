@@ -591,6 +591,20 @@ _SETPARAMS_COLOR_SPACES = {
     "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc",
     "chroma-derived-c", "ictcp",
 }
+_SETPARAMS_PRIMARIES = {
+    "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film",
+    "bt2020", "smpte428", "smpte431", "smpte432", "jedec-p22", "ebu3213",
+}
+_SETPARAMS_TRANSFERS = {
+    "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear",
+    "log100", "log316", "iec61966-2-4", "bt1361e", "iec61966-2-1",
+    "bt2020-10", "bt2020-12", "smpte2084", "smpte428", "arib-std-b67",
+}
+
+
+def _setparams_tag(value: str, allowed, preserve: bool) -> str:
+    tag = _normalized_transfer(value)
+    return tag if preserve and tag in allowed else "unknown"
 
 
 def sdr_yuv_conversion_filter(
@@ -619,7 +633,13 @@ def sdr_yuv_conversion_filter(
     meet the encoder's ``-colorspace bt709`` and FFmpeg quietly inserts a
     second conversion to BT.709, undoing the inverse above. Measured on flat
     bands of a BT.709 source: 6.94 levels of luma error without the
-    relabel, 1.15 with it.
+    relabel, 1.15 with it. Primaries and transfer ride along for a different
+    reason: FFmpeg 9 takes them from the frames, which carry none after a
+    PNG or FFV1 round trip, so ``-color_primaries`` and ``-color_trc`` were
+    silently dropped and a fully tagged BT.709 source failed its contract.
+
+    Gray sources decode as full range unless tagged otherwise (OpenCV and
+    swscale both read GRAY8 that way), so their inverse is full range too.
     """
     if meta is None or meta.is_hdr:
         return ""
@@ -636,13 +656,17 @@ def sdr_yuv_conversion_filter(
         target = {"422": "yuv422p", "444": "yuv444p"}.get(layout, "yuv420p")
     decoded_matrix = decode_matrix or OPENCV_DECODE_MATRIX
     decoded_range = decode_range if decode_range in {"tv", "pc"} else (
-        "pc" if str(meta.pixel_format or "").lower().startswith("yuvj")
+        "pc"
+        if str(meta.pixel_format or "").lower().startswith(("yuvj", "gray"))
         else "tv"
     )
-    matrix_tag = _normalized_transfer(meta.color_space)
+    matrix_tag = _setparams_tag(
+        meta.color_space, _SETPARAMS_COLOR_SPACES, preserve_tags)
+    primaries_tag = _setparams_tag(
+        meta.color_primaries, _SETPARAMS_PRIMARIES, preserve_tags)
+    transfer_tag = _setparams_tag(
+        meta.color_transfer, _SETPARAMS_TRANSFERS, preserve_tags)
     range_tag = _normalized_transfer(meta.color_range)
-    if not preserve_tags or matrix_tag not in _SETPARAMS_COLOR_SPACES:
-        matrix_tag = "unknown"
     if not preserve_tags or range_tag not in {"tv", "pc"}:
         # An untagged range describes the data the conversion produced.
         range_tag = decoded_range
@@ -651,7 +675,8 @@ def sdr_yuv_conversion_filter(
     return (
         f"scale=out_color_matrix={decoded_matrix}:"
         f"out_range={decoded_range}:flags=accurate_rnd,format={target},"
-        f"setparams=colorspace={matrix_tag}:range={range_tag}"
+        f"setparams=colorspace={matrix_tag}:range={range_tag}:"
+        f"color_primaries={primaries_tag}:color_trc={transfer_tag}"
     )
 
 
