@@ -549,16 +549,34 @@ for the current installation and deprecation status.
 
 ### Measured provider evidence
 
-Every number below came from `python -m backend.provider_benchmark`, which runs one reference clip end to end and records what the run cost. The timings cover removal only: the quality report samples frames, renders overlays, and re-runs the detector over the repaired region, which costs several times the removal itself on a clip this small, so it runs separately and is not folded into the frames per second. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate.
+Every number below came from `python -m backend.provider_benchmark`, which runs one clip end to end and records what the run cost. The timings cover removal only. The quality report samples frames, renders overlays, and re-runs the detector over the repaired region, so it runs separately and isn't folded into the frames per second. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate. The licence of every clip measured is recorded beside it in `docs/benchmarks/clip-licences.json`.
+
+**Base a download decision on the 720p clip.** It's 1280x720 and twelve seconds long at 24 fps, with four changing captions over a moving textured background, and it runs with automatic detection, so OCR inference happens on every frame.
+
+| Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
+|------|-------------------|------|------|----------|------------|
+| CPU | `CPUExecutionProvider` | 1.14 FPS | 1.09 FPS | 3525 MiB | n/a |
+| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 1.13 FPS | 1.07 FPS | 4113 MiB | +2 MiB device-wide |
+
+Right now the NVIDIA build isn't faster at this. Both lanes produced byte-identical frames at the same speed, and the CUDA run barely touched the card. OCR still runs on ONNX Runtime's CPU provider in the NVIDIA build, and the default cleanup (temporal background exposure) is CPU work in both builds. Today the card pays off for the LaMa and ProPainter cleanup modes and the opt-in model adapters, not for a default run. Moving OCR onto CUDA is the next change planned for this lane, and this table gets measured again when it lands.
+
+Clip: `tests/benchmarks/benchmark_720p.mkv`, rendered by `scripts/generate_benchmark_clip.py`. It's synthetic and MIT licensed like the rest of the repository. The two runs, the second from the NVIDIA environment:
+
+```bat
+python -m backend.provider_benchmark tests/benchmarks/benchmark_720p.mkv --device cpu --profile cpu --set sttn_skip_detection=false
+python -m backend.provider_benchmark tests/benchmarks/benchmark_720p.mkv --device cuda:0 --profile nvidia --set sttn_skip_detection=false
+```
+
+The fixture pair proves something narrower. It runs the 160x96 sixteen-frame `tests/clips/static_dialogue.mkv` with a fixed manual region.
 
 | Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
 |------|-------------------|------|------|----------|------------|
 | CPU | `CPUExecutionProvider` | 9.81 FPS | 11.85 FPS | 914 MiB | n/a |
 | NVIDIA CUDA 13 | `CUDAExecutionProvider` | 6.43 FPS | 10.98 FPS | 1562 MiB | +0 MiB device-wide |
 
-Host: NVIDIA GeForce RTX 4070 SUPER (12282 MiB, driver 610.88), Windows 11, Python 3.13. Clip: `tests/clips/static_dialogue.mkv`, a 160x96 sixteen-frame fixture driven with a fixed manual region.
+A fixed region sends the work down the temporal-exposure and cv2 paths, which are CPU numpy rather than ONNX inference, and a 1.6-second run never reaches the point where moving data to the card pays for itself. Repeat the command and the ordering changes. What it does show is that the CUDA runtime loads in that environment and that its output matches the CPU run exactly. It says nothing about throughput.
 
-Read that as evidence, not as a GPU recommendation. The two lanes land within run-to-run noise of each other here, and the fixture is why: a fixed manual region sends the work down the temporal-exposure and cv2 paths, which are CPU numpy rather than ONNX inference, and a 1.6-second run over sixteen 160x96 frames never reaches the point where moving data to the card pays for itself. Repeat the command and the ordering changes. What the CUDA run does establish is that the provider really was CUDA and that its output was identical to the CPU run. A throughput comparison that would justify picking one bundle over the other needs real footage at a real resolution, which ROADMAP.md tracks separately.
+Host for both pairs: NVIDIA GeForce RTX 4070 SUPER (12282 MiB, driver 610.88), Windows 11, Python 3.13.
 
 GPU memory is recorded device-wide rather than per process, because consumer GeForce cards under WDDM report `[N/A]` for per-process VRAM and a per-process figure would be invented. The evidence states which it is.
 

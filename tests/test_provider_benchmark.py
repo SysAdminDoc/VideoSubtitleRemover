@@ -8,6 +8,7 @@ committed evidence, so a number in the README always traces to a run.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -273,6 +274,87 @@ class CommittedEvidenceTests(unittest.TestCase):
             with self.subTest(name=name):
                 payload = self._load(name)
                 self.assertTrue(payload["config"]["fromManifest"])
+
+
+class ThroughputEvidenceTests(unittest.TestCase):
+    """RM-351: the pair a download decision can rest on.
+
+    The fixture pair above drives a fixed region through CPU numpy, so it
+    says nothing about inference. This pair runs a 720p, twelve-second clip
+    with automatic detection on both lanes.
+    """
+
+    PAIR = ("provider-benchmark-720p-cpu.json",
+            "provider-benchmark-720p-nvidia.json")
+
+    def _load(self, name):
+        path = EVIDENCE_DIR / name
+        self.assertTrue(path.is_file(), path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_both_lanes_passed_on_the_same_clip_and_config(self):
+        cpu, gpu = (self._load(name) for name in self.PAIR)
+        for payload in (cpu, gpu):
+            self.assertTrue(payload["passed"], payload["errors"])
+            self.assertTrue(payload["timing"]["identicalOutputs"])
+            self.assertIn("status", payload["quality"]["gate"])
+            # Automatic detection, so OCR inference actually runs.
+            self.assertIs(
+                payload["config"]["overrides"]["sttn_skip_detection"], False)
+            raw = json.dumps(payload)
+            for marker in ("C:\\\\", "C:/", "/home/", "/Users/",
+                           "AppData", "Temp"):
+                self.assertNotIn(marker, raw, marker)
+        self.assertEqual(cpu["input"], gpu["input"])
+        cpu_overrides = dict(cpu["config"]["overrides"])
+        gpu_overrides = dict(gpu["config"]["overrides"])
+        self.assertEqual(cpu_overrides.pop("device"), "cpu")
+        self.assertEqual(gpu_overrides.pop("device"), "cuda:0")
+        self.assertEqual(cpu_overrides, gpu_overrides)
+        self.assertEqual(
+            cpu["runtime"]["activeProviders"][:1], ["CPUExecutionProvider"])
+        self.assertEqual(
+            gpu["runtime"]["activeProviders"][:1], ["CUDAExecutionProvider"])
+        self.assertTrue(gpu["runtime"]["providerVerified"])
+
+    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
+    def test_the_clip_is_real_resolution_and_long_enough(self):
+        clip = ROOT / self._load(self.PAIR[0])["input"]["path"]
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height:format=duration",
+             "-of", "json", str(clip)],
+            capture_output=True, text=True, timeout=30, check=True,
+        )
+        probe = json.loads(result.stdout)
+        self.assertGreaterEqual(int(probe["streams"][0]["height"]), 720)
+        self.assertGreaterEqual(float(probe["format"]["duration"]), 10.0)
+
+
+class ClipLicenceTests(unittest.TestCase):
+    """Every clip a committed evidence file measured has a recorded licence
+    that matches the bytes in the repository."""
+
+    def test_every_evidence_input_is_licensed_and_hash_checked(self):
+        record = json.loads(
+            (EVIDENCE_DIR / "clip-licences.json").read_text(encoding="utf-8"))
+        clips = {entry["path"]: entry for entry in record["clips"]}
+        evidence_files = sorted(
+            path for path in EVIDENCE_DIR.glob("provider-benchmark-*.json"))
+        self.assertTrue(evidence_files)
+        for path in evidence_files:
+            with self.subTest(evidence=path.name):
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                entry = clips.get(payload["input"]["path"])
+                self.assertIsNotNone(entry, payload["input"]["path"])
+                self.assertTrue(entry["licence"])
+                self.assertIn(path.name, entry["evidence"])
+                self.assertEqual(entry["sha256"], payload["input"]["sha256"])
+        for entry in record["clips"]:
+            with self.subTest(clip=entry["path"]):
+                digest = hashlib.sha256(
+                    (ROOT / entry["path"]).read_bytes()).hexdigest()
+                self.assertEqual(digest, entry["sha256"])
 
 
 class BenchmarkCliTests(unittest.TestCase):
