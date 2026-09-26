@@ -2218,8 +2218,10 @@ def _run_processing(
         f"d3d12={'on' if config.d3d12_accel else 'off'} | "
         f"translation={'on' if config.translation_enabled else 'off'}"
     )
-    if config.preserve_audio and not ffmpeg_ready:
-        print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
+    if not ffmpeg_ready:
+        # RM-348: videos are decoded by the external FFmpeg only.
+        print("[note] FFmpeg is not available, so videos can't be read. "
+              "Still images will process.")
 
     # RM-356: this build knows there is an NVIDIA card and knows it cannot use
     # it, and used to put both facts in the log as a warning nobody reads.
