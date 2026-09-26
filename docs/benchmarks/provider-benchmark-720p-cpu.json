@@ -35,17 +35,44 @@
   },
   "memory": {
     "gpu": {
-      "baselineMiB": 749,
-      "deltaMiB": 6,
+      "baselineMiB": 756,
+      "deltaMiB": 34,
       "measured": true,
-      "peakMiB": 755,
-      "sampleCount": 1166,
+      "peakMiB": 790,
+      "sampleCount": 1023,
       "sampleIntervalSeconds": 0.25,
       "scope": "device-wide"
     },
-    "peakWorkingSetBytes": 3711078400
+    "peakWorkingSetBytes": 3690201088
   },
   "passed": true,
+  "pipeline": {
+    "detection": {
+      "frames_ocr": 86,
+      "frames_skipped": 202,
+      "frames_total": 288,
+      "skip_reasons": {
+        "phash": 202
+      },
+      "unique_regions_detected": 1
+    },
+    "inpaint": {
+      "effectiveDevice": "cpu",
+      "engine": "sttn",
+      "executions": 288,
+      "fallbackReason": "",
+      "fellBack": false,
+      "provider": "cv2 (no temporal exposure)"
+    },
+    "ocr": {
+      "effectiveDevice": "cpu",
+      "engine": "RapidOCR",
+      "executions": 86,
+      "fallbackReason": "",
+      "fellBack": false,
+      "provider": "CPUExecutionProvider"
+    }
+  },
   "profile": "cpu",
   "quality": {
     "gate": {
@@ -58,7 +85,7 @@
       ],
       "ladderStep": "manual-review",
       "previewFrameCount": 1,
-      "reason": "quality report tag is Review; ROI SSIM 0.7218 below 0.9500; residual text score 0.2510 above 0.0250",
+      "reason": "quality report tag is Review; ROI SSIM 0.7245 below 0.9500; residual text score 0.1944 above 0.0250",
       "reasons": [
         {
           "detail": "quality report tag is Review",
@@ -66,18 +93,18 @@
           "metric": "tag"
         },
         {
-          "detail": "ROI SSIM 0.7218 below 0.9500",
+          "detail": "ROI SSIM 0.7245 below 0.9500",
           "ladder": "alternate-inpainter",
           "metric": "ssim",
           "threshold": 0.95,
-          "value": 0.7217606027921041
+          "value": 0.7245228250821432
         },
         {
-          "detail": "residual text score 0.2510 above 0.0250",
+          "detail": "residual text score 0.1944 above 0.0250",
           "ladder": "increase-dilation",
           "metric": "residual_text_score",
           "threshold": 0.025,
-          "value": 0.2510190444370197
+          "value": 0.1944282261355432
         }
       ],
       "remediation": "Multiple quality checks failed or a single check failed severely. Inspect the quality sheet and decide whether to accept, re-process with different settings, or exclude this file from the batch.",
@@ -86,24 +113,24 @@
     "metrics": {
       "dists": null,
       "lpips": null,
-      "mask_local_temporal_mean_score": 8.21885217561205e-05,
+      "mask_local_temporal_mean_score": 0.0,
       "mask_local_temporal_pairs": 287,
       "mask_local_temporal_scene_cuts_excluded": 0,
-      "mask_local_temporal_score": 0.023588105744006587,
+      "mask_local_temporal_score": 0.0,
       "mask_local_temporal_threshold": 0.08,
       "mask_local_temporal_worst_pair": {
-        "end_frame": 90,
-        "inside_error": 22.38579559326172,
-        "motion_inlier_ratio": 0.5804878048780487,
-        "outside_error": 1.036973237991333,
+        "end_frame": 1,
+        "inside_error": 0.9619912505149841,
+        "motion_inlier_ratio": 0.9468085106382979,
+        "outside_error": 0.6071543097496033,
         "overlay": "<local path removed>",
-        "pixels": 49438,
-        "reference_inside_error": 16.37082862854004,
-        "score": 0.023588105744006587,
-        "start_frame": 89,
-        "timestamp": 3.75
+        "pixels": 52409,
+        "reference_inside_error": 4.940697193145752,
+        "score": 0.0,
+        "start_frame": 0,
+        "timestamp": 0.041666666666666664
       },
-      "mask_local_temporal_worst_score": 0.023588105744006587,
+      "mask_local_temporal_worst_score": 0.0,
       "mask_review_spans": [
         {
           "end": 1.1666666666666667,
@@ -111,7 +138,7 @@
           "kind": "residual",
           "reason": "Residual text score exceeded the review threshold",
           "schema": "vsr.mask_review_spans.v1",
-          "score": 0.220515,
+          "score": 0.185893,
           "start": 1.0,
           "start_frame": 24,
           "suggested_mode": "add",
@@ -123,7 +150,7 @@
           "kind": "residual",
           "reason": "Residual text score exceeded the review threshold",
           "schema": "vsr.mask_review_spans.v1",
-          "score": 0.321464,
+          "score": 0.230201,
           "start": 2.4166666666666665,
           "start_frame": 58,
           "suggested_mode": "add",
@@ -135,9 +162,21 @@
           "kind": "residual",
           "reason": "Residual text score exceeded the review threshold",
           "schema": "vsr.mask_review_spans.v1",
-          "score": 0.346443,
+          "score": 0.19677,
           "start": 5.166666666666667,
           "start_frame": 124,
+          "suggested_mode": "add",
+          "threshold": 0.025
+        },
+        {
+          "end": 7.875,
+          "end_frame": 189,
+          "kind": "residual",
+          "reason": "Residual text score exceeded the review threshold",
+          "schema": "vsr.mask_review_spans.v1",
+          "score": 0.78888,
+          "start": 7.833333333333333,
+          "start_frame": 188,
           "suggested_mode": "add",
           "threshold": 0.025
         },
@@ -147,7 +186,7 @@
           "kind": "residual",
           "reason": "Residual text score exceeded the review threshold",
           "schema": "vsr.mask_review_spans.v1",
-          "score": 0.475156,
+          "score": 0.260272,
           "start": 9.25,
           "start_frame": 222,
           "suggested_mode": "add",
@@ -159,26 +198,26 @@
           "kind": "residual",
           "reason": "Residual text score exceeded the review threshold",
           "schema": "vsr.mask_review_spans.v1",
-          "score": 0.404118,
+          "score": 0.271118,
           "start": 10.291666666666666,
           "start_frame": 247,
           "suggested_mode": "add",
           "threshold": 0.025
         }
       ],
-      "outside_mask_color_drift": 0.5114538524713781,
+      "outside_mask_color_drift": 0.0010874577604530107,
       "outside_mask_color_drift_frames": 288,
       "outside_mask_color_drift_metric": "cielab_delta_e",
       "outside_mask_color_drift_threshold": 1.0,
       "outside_mask_color_drift_worst_frame": {
-        "frame": 248,
+        "frame": 143,
         "metric": "cielab_delta_e",
-        "p95": 0.8768894076347351,
-        "score": 0.5284863710403442,
-        "timestamp": 10.333333333333334
+        "p95": 0.0,
+        "score": 0.0030334140174090862,
+        "timestamp": 5.958333333333333
       },
-      "psnr": 28.29831486292729,
-      "psnr_harmonic_mean": 28.20836221250617,
+      "psnr": 28.266601194338147,
+      "psnr_harmonic_mean": 28.18614561473205,
       "quality_final_encode_verified": true,
       "quality_gate": {
         "degradedMetrics": [
@@ -192,7 +231,7 @@
         "previewFramePaths": [
           "<local path removed>"
         ],
-        "reason": "quality report tag is Review; ROI SSIM 0.7218 below 0.9500; residual text score 0.2510 above 0.0250",
+        "reason": "quality report tag is Review; ROI SSIM 0.7245 below 0.9500; residual text score 0.1944 above 0.0250",
         "reasons": [
           {
             "detail": "quality report tag is Review",
@@ -200,18 +239,18 @@
             "metric": "tag"
           },
           {
-            "detail": "ROI SSIM 0.7218 below 0.9500",
+            "detail": "ROI SSIM 0.7245 below 0.9500",
             "ladder": "alternate-inpainter",
             "metric": "ssim",
             "threshold": 0.95,
-            "value": 0.7217606027921041
+            "value": 0.7245228250821432
           },
           {
-            "detail": "residual text score 0.2510 above 0.0250",
+            "detail": "residual text score 0.1944 above 0.0250",
             "ladder": "increase-dilation",
             "metric": "residual_text_score",
             "threshold": 0.025,
-            "value": 0.2510190444370197
+            "value": 0.1944282261355432
           }
         ],
         "remediation": "Multiple quality checks failed or a single check failed severely. Inspect the quality sheet and decide whether to accept, re-process with different settings, or exclude this file from the batch.",
@@ -219,69 +258,92 @@
       },
       "removal_verification": {
         "confidenceThreshold": 0.6,
-        "detectionCount": 0,
+        "detectionCount": 1,
         "detectorPasses": 20,
-        "frames": [],
+        "frames": [
+          {
+            "detections": [
+              {
+                "box": [
+                  209,
+                  604,
+                  1069,
+                  678
+                ],
+                "confidence": 0.78888
+              }
+            ],
+            "frame": 188,
+            "roi": [
+              209,
+              604,
+              1070,
+              678
+            ],
+            "survivingSourceBoxes": 1,
+            "untouchedSourceBoxes": 0
+          }
+        ],
         "framesChecked": 10,
         "framesSampled": 10,
         "framesUnchecked": 0,
         "framesWithNoMask": 0,
-        "framesWithSurvivingText": 0,
+        "framesWithSurvivingText": 1,
         "maskCheckedFrames": 10,
         "matchIou": 0.3,
-        "maxConfidence": null,
+        "maxConfidence": 0.78888,
         "missedDetectionBoxes": 0,
         "ran": true,
         "schema": "vsr.removal_verification.v1",
-        "seconds": 16.846788,
+        "seconds": 26.955394,
         "sourceBoxes": 10,
         "sourceScannedFrames": 10,
-        "survivingFraction": 0.0,
+        "survivingFraction": 0.1,
         "survivingFractionThreshold": 0.1,
-        "survivingSourceBoxes": 0,
+        "survivingSourceBoxes": 1,
         "uncheckedReasons": [],
         "unresolvedBoxes": 0,
         "untouchedSourceBoxes": 0
       },
-      "residual_text_score": 0.2510190444370197,
+      "residual_text_score": 0.1944282261355432,
       "roi_bbox": [
         209,
         604,
         1070,
-        677
+        678
       ],
-      "roi_psnr": 16.713748977346057,
-      "roi_psnr_harmonic_mean": 16.556869618812026,
-      "roi_ssim": 0.7217606027921041,
-      "roi_ssim_harmonic_mean": 0.7212965555178311,
+      "roi_psnr": 16.66354743024854,
+      "roi_psnr_harmonic_mean": 16.528173311022893,
+      "roi_ssim": 0.7245228250821432,
+      "roi_ssim_harmonic_mean": 0.7241233659212886,
       "roi_vmaf": null,
       "roi_worst_frame": {
         "frame": 222,
-        "psnr": 14.519018346166806,
-        "ssim": 0.6864879329999288
+        "psnr": 14.66199851154216,
+        "ssim": 0.6933911840120951
       },
       "samples": 10,
-      "seam_score": 0.23807810264793014,
+      "seam_score": 0.27087388797292977,
       "sheet": null,
-      "ssim": 0.9785923918088277,
-      "ssim_harmonic_mean": 0.9785907484096383,
+      "ssim": 0.9809566517670948,
+      "ssim_harmonic_mean": 0.9809552745398629,
       "tag": "Review",
       "temporal_consistency": null,
       "temporal_exposure": {
         "batches": 10,
-        "cv2Pixels": 14317071,
+        "cv2Pixels": 14369144,
         "degradedThreshold": 0.05,
         "degradedToCv2": true,
-        "exposedFraction": 0.039700671414726454,
-        "exposedPixels": 591896,
-        "maskedPixels": 14908967
+        "exposedFraction": 0.036025866100511124,
+        "exposedPixels": 537007,
+        "maskedPixels": 14906151
       },
-      "temporal_flicker_score": 0.0028386267367750406,
+      "temporal_flicker_score": 0.0024969363100050637,
       "vmaf": null,
       "worst_frame": {
         "frame": 222,
-        "psnr": 26.136506920019777,
-        "ssim": 0.9760530591011047
+        "psnr": 26.265067335565494,
+        "ssim": 0.978805144627889
       }
     },
     "ran": true,
@@ -290,31 +352,31 @@
   "runs": [
     {
       "error": "",
-      "fps": 1.1214,
+      "fps": 1.3286,
       "frames": 288,
       "label": "cold",
       "ok": true,
       "outputFrames": {
         "frame_count": 288,
         "height": 720,
-        "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
+        "sha256": "33c9fc1627ca7ddf3f54a7a4a8fd03f879435f73d70e402a51aaa54280552026",
         "width": 1280
       },
-      "seconds": 256.822364
+      "seconds": 216.77556
     },
     {
       "error": "",
-      "fps": 1.1283,
+      "fps": 1.3779,
       "frames": 288,
       "label": "warm1",
       "ok": true,
       "outputFrames": {
         "frame_count": 288,
         "height": 720,
-        "sha256": "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba",
+        "sha256": "33c9fc1627ca7ddf3f54a7a4a8fd03f879435f73d70e402a51aaa54280552026",
         "width": 1280
       },
-      "seconds": 255.244496
+      "seconds": 209.021295
     }
   ],
   "runtime": {
@@ -334,7 +396,7 @@
   "timing": {
     "identicalOutputs": true,
     "outputDigests": [
-      "eb81fc67be8db08bbcc431f3f5f3035352ce4fdd45bc5351f638f75b4c7101ba"
+      "33c9fc1627ca7ddf3f54a7a4a8fd03f879435f73d70e402a51aaa54280552026"
     ],
     "runCount": 2
   },

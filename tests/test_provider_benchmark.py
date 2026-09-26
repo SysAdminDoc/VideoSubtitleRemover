@@ -317,6 +317,24 @@ class ThroughputEvidenceTests(unittest.TestCase):
             gpu["runtime"]["activeProviders"][:1], ["CUDAExecutionProvider"])
         self.assertTrue(gpu["runtime"]["providerVerified"])
 
+    def test_the_pipeline_itself_ran_where_the_lane_says(self):
+        """`runtime` comes from a separate probe session, and it reported
+        CUDA active on evidence whose OCR ran on the CPU. These fields come
+        from the run's own execution provenance."""
+        cpu, gpu = (self._load(name) for name in self.PAIR)
+        self.assertEqual(cpu["pipeline"]["ocr"]["effectiveDevice"], "cpu")
+        self.assertEqual(gpu["pipeline"]["ocr"]["effectiveDevice"], "cuda")
+        self.assertEqual(
+            gpu["pipeline"]["ocr"]["provider"], "CUDAExecutionProvider")
+        self.assertFalse(gpu["pipeline"]["ocr"]["fellBack"])
+        for payload in (cpu, gpu):
+            self.assertGreater(payload["pipeline"]["ocr"]["executions"], 0)
+            self.assertGreater(
+                payload["pipeline"]["detection"]["frames_ocr"], 0)
+        # A CUDA session that really ran allocates on the card; the evidence
+        # where OCR ran on the CPU showed a +2 MiB device-wide delta.
+        self.assertGreaterEqual(gpu["memory"]["gpu"]["deltaMiB"], 100)
+
     @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
     def test_the_clip_is_real_resolution_and_long_enough(self):
         clip = ROOT / self._load(self.PAIR[0])["input"]["path"]

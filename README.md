@@ -553,14 +553,14 @@ for the current installation and deprecation status.
 
 Every number below came from `python -m backend.provider_benchmark`, which runs one clip end to end and records what the run cost. The timings cover removal only. The quality report samples frames, renders overlays, and re-runs the detector over the repaired region, so it runs separately and isn't folded into the frames per second. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate. The licence of every clip measured is recorded beside it in `docs/benchmarks/clip-licences.json`.
 
-**Base a download decision on the 720p clip.** It's 1280x720 and twelve seconds long at 24 fps, with four changing captions over a moving textured background, and it runs with automatic detection, so OCR inference happens on every frame.
+**Base a download decision on the 720p clip.** It's 1280x720 and twelve seconds long at 24 fps, with four changing captions over a moving textured background, and it runs with automatic detection, so OCR inference runs throughout the clip.
 
 | Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
 |------|-------------------|------|------|----------|------------|
-| CPU | `CPUExecutionProvider` | 1.12 FPS | 1.13 FPS | 3539 MiB | n/a |
-| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 2.08 FPS | 2.08 FPS | 4999 MiB | +453 MiB device-wide |
+| CPU | `CPUExecutionProvider` | 1.33 FPS | 1.38 FPS | 3519 MiB | n/a |
+| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 2.13 FPS | 2.16 FPS | 4907 MiB | +402 MiB device-wide |
 
-The NVIDIA build runs this clip about 1.85 times faster. OCR runs on the card there, and it's the stage a default run spends most of its inference on. The default cleanup (temporal background exposure) is still CPU work in both builds, which is why the gap isn't wider, while the LaMa and ProPainter cleanup modes and the opt-in model adapters use the card too. The two lanes' frames aren't byte-identical: OCR on the GPU places a few boxes a pixel differently. Their quality metrics agree to three decimals (ROI PSNR 16.714, ROI SSIM 0.7218 and residual text 0.2510 on both), and only the seam score moves, 0.238 against 0.229.
+The NVIDIA build runs this clip about 1.6 times faster. OCR runs on the card there, and the evidence file records that from the run itself: 86 of the 288 frames reached OCR, and pHash skipping reused the previous mask on the near-identical rest, as it does in any run. The default cleanup is still CPU work in both builds. On this clip it had little to borrow from, because the captions sit in one band for the whole twelve seconds and only 3.6% of the masked pixels ever show up uncovered in another frame, so cv2 fills the region instead. That's why the gap isn't wider. The LaMa and ProPainter cleanup modes and the opt-in model adapters use the card too. The two lanes' output frames differ slightly (their digests don't match), but their quality metrics agree to three decimals (ROI PSNR 16.664, ROI SSIM 0.7245 and residual text 0.1944 on both), and only the seam score moves, 0.271 against 0.270.
 
 Clip: `tests/benchmarks/benchmark_720p.mkv`, rendered by `scripts/generate_benchmark_clip.py`. It's synthetic and MIT licensed like the rest of the repository. The two runs, the second from the NVIDIA environment:
 

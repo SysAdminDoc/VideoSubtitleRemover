@@ -20,7 +20,7 @@
       "licence": "MIT",
       "licenceFile": "LICENSE",
       "origin": "Synthetic 1280x720, 24 fps, twelve-second clip rendered by scripts/generate_benchmark_clip.py: a moving textured plate with four rendered captions. No third-party footage or fonts are embedded in the pixels beyond OpenCV's built-in Hershey font.",
-      "role": "Throughput clip driven with automatic detection, so OCR inference runs on every sampled frame. Base a CPU-versus-CUDA download decision on this clip, not on the fixture.",
+      "role": "Throughput clip driven with automatic detection, so OCR inference runs throughout the clip, on every frame pHash skipping doesn't reuse the previous mask for. Base a CPU-versus-CUDA download decision on this clip, not on the fixture.",
       "evidence": [
         "provider-benchmark-720p-cpu.json",
         "provider-benchmark-720p-nvidia.json"
