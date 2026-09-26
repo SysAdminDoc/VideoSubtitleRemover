@@ -220,6 +220,57 @@ def _rapidocr_directml_params(device: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def _rapidocr_cuda_params(device: str) -> Optional[Dict[str, Any]]:
+    """RapidOCR engine settings that put its ONNX sessions on CUDA.
+
+    RM-369: without them a cuda device fell through to RapidOCR's default
+    CPU provider, so OCR, the one inference stage every automatic run
+    performs, never touched the card the NVIDIA build exists for.
+    """
+    text = str(device or "").strip().lower()
+    if not text.startswith("cuda") or _rapidocr_engine_preference() == "cpu":
+        return None
+    if not _onnxruntime_has_provider("CUDAExecutionProvider"):
+        return None
+    try:
+        index = int(text.split(":", 1)[1]) if ":" in text else 0
+    except ValueError:
+        index = 0
+    return {
+        "EngineConfig.onnxruntime.use_cuda": True,
+        "EngineConfig.onnxruntime.use_dml": False,
+        "EngineConfig.onnxruntime.cuda_ep_cfg.device_id": max(0, index),
+        # RapidOCR defaults to EXHAUSTIVE, which re-benchmarks cuDNN for every
+        # new input shape, and the recognizer sees a new width for most text
+        # lines: 11.1 against 14.1 FPS with HEURISTIC on 60 frames of the
+        # 720p benchmark clip, same text either way.
+        "EngineConfig.onnxruntime.cuda_ep_cfg.cudnn_conv_algo_search": "HEURISTIC",
+    }
+
+
+def _rapidocr_session_providers(instance) -> Dict[str, str]:
+    """First provider of each ONNX session a RapidOCR instance built.
+
+    Read from the sessions themselves: ONNX Runtime treats a provider list as
+    a preference, so asking for CUDA proves nothing about where they run.
+    """
+    providers: Dict[str, str] = {}
+    for name in ("text_det", "text_cls", "text_rec"):
+        engine = getattr(getattr(instance, name, None), "session", None)
+        session = getattr(engine, "session", engine)
+        reader = getattr(session, "get_providers", None)
+        if not callable(reader):
+            continue
+        try:
+            active = list(reader())
+        except Exception as exc:  # noqa: BLE001 - a diagnostic read only
+            logger.debug("RapidOCR %s provider read failed: %s", name, exc)
+            continue
+        if active:
+            providers[name] = str(active[0])
+    return providers
+
+
 def _rapidocr_engine_preference() -> str:
     return os.environ.get("VSR_RAPIDOCR_ENGINE", "auto").strip().lower()
 
@@ -360,6 +411,11 @@ def _build_rapidocr(
     rapid_module=None,
     variant: str = "v6",
 ):
+    """Return ``(instance, provider label, fallback reason)``.
+
+    The reason is empty unless an accelerator was asked for, could have run,
+    and did not, so the OCR stage's provenance can say why.
+    """
     variant_params = _rapidocr_variant_params(
         rapid_module, normalize_rapidocr_variant(variant)
     )
@@ -371,7 +427,7 @@ def _build_rapidocr(
         try:
             return rapid_cls(
                 params=_merge_rapidocr_params(variant_params, openvino_params)
-            ), "OpenVINO"
+            ), "OpenVINO", ""
         except Exception as exc:
             if _rapidocr_engine_preference() in {"openvino", "ov"}:
                 raise RequestedStageError(
@@ -395,16 +451,49 @@ def _build_rapidocr(
         try:
             return rapid_cls(
                 params=_merge_rapidocr_params(variant_params, directml_params)
-            ), "DirectML"
+            ), "DirectML", ""
         except Exception as exc:
             logger.warning(
                 "RapidOCR DirectML provider init failed; retrying CPU "
                 f"provider: {exc}"
             )
+    fallback_reason = ""
+    cuda_params = _rapidocr_cuda_params(device)
+    if cuda_params:
+        try:
+            import onnxruntime as ort  # type: ignore
+            from backend.onnxruntime_cuda import (
+                preload_onnxruntime_cuda_dlls_if_needed,
+            )
+
+            preload_onnxruntime_cuda_dlls_if_needed(
+                ort, ["CUDAExecutionProvider"])
+            instance = rapid_cls(
+                params=_merge_rapidocr_params(variant_params, cuda_params))
+        # onnxruntime's pybind11 errors (Fail, EPFail, ...) share no base
+        # below Exception; the reason is recorded, not swallowed.
+        except Exception as exc:  # noqa: BLE001 - recorded CUDA fallback
+            fallback_reason = f"RapidOCR could not start on CUDA: {exc}"
+            logger.warning("%s; using the CPU provider", fallback_reason)
+        else:
+            active = _rapidocr_session_providers(instance)
+            if active and all(
+                    value == "CUDAExecutionProvider"
+                    for value in active.values()):
+                return instance, "CUDA", ""
+            # The sessions still work wherever they landed, so keep them
+            # rather than building a second CPU set, and say where they are.
+            fallback_reason = (
+                "RapidOCR asked for CUDA but its sessions run on "
+                + (", ".join(f"{k}={v}" for k, v in sorted(active.items()))
+                   or "providers that could not be read")
+            )
+            logger.warning(fallback_reason)
+            return instance, "CPU", fallback_reason
     try:
         if variant_params:
-            return rapid_cls(params=variant_params), "CPU"
-        return rapid_cls(), "CPU"
+            return rapid_cls(params=variant_params), "CPU", fallback_reason
+        return rapid_cls(), "CPU", fallback_reason
     except (KeyError, TypeError, ValueError) as exc:
         if variant_params:
             raise RequestedStageError(
@@ -421,7 +510,7 @@ def _build_rapidocr(
                     "model generation or choose a supported variant."
                 ),
             ) from exc
-        return rapid_cls(params={}), "CPU"
+        return rapid_cls(params={}), "CPU", fallback_reason
 
 
 def _vlm_detector_is_usable(detector) -> bool:
@@ -849,7 +938,7 @@ class SubtitleDetector:
                 rapid_obj = None
                 if _module_can_import("rapidocr"):
                     import rapidocr as _rapidocr_module
-                    rapid_obj, rapid_provider = _build_rapidocr(
+                    rapid_obj, rapid_provider, rapid_reason = _build_rapidocr(
                         _rapidocr_module.RapidOCR,
                         self.device,
                         _rapidocr_module,
@@ -857,7 +946,7 @@ class SubtitleDetector:
                     )
                 elif _module_can_import("rapidocr_onnxruntime"):
                     import rapidocr_onnxruntime as _rapidocr_module
-                    rapid_obj, rapid_provider = _build_rapidocr(
+                    rapid_obj, rapid_provider, rapid_reason = _build_rapidocr(
                         _rapidocr_module.RapidOCR,
                         self.device,
                         _rapidocr_module,
@@ -868,13 +957,17 @@ class SubtitleDetector:
                 if rapid_obj is not None:
                     self._rapid_model = rapid_obj
                     self._engine_name = {
+                        "CUDA": "RapidOCR (CUDA)",
                         "DirectML": "RapidOCR (DirectML)",
                         "OpenVINO": "RapidOCR (OpenVINO)",
                     }.get(rapid_provider, "RapidOCR")
                     self._provider_name = {
+                        "CUDA": "CUDAExecutionProvider",
                         "DirectML": "DmlExecutionProvider",
                         "OpenVINO": "OpenVINO",
                     }.get(rapid_provider, "CPUExecutionProvider")
+                    if rapid_reason:
+                        self._provenance_reason = rapid_reason
                     self._select_implementation(
                         "rapidocr", self._provider_name)
                     if rapid_provider == "OpenVINO":
