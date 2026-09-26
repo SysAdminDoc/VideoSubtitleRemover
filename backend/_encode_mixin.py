@@ -65,8 +65,16 @@ class _EncodeMixin:
         )
         return ["-svtav1-params", f"film-grain={grain}"]
 
-    def _get_encode_args(self, *, allow_d3d12: bool = True) -> List[str]:
-        """Return FFmpeg video encoder arguments, preferring hardware encoding."""
+    def _get_encode_args(self, *, allow_d3d12: bool = True,
+                         rgb_frames: bool = False) -> List[str]:
+        """Return FFmpeg video encoder arguments, preferring hardware encoding.
+
+        ``rgb_frames`` is set by the encodes that read the pipeline's own BGR
+        frames (checkpoint PNGs and the lossless intermediate). Those get an
+        explicit conversion back to the source's YUV layout; encodes that
+        read an already finished YUV file must not, or it would be converted
+        a second time with the wrong matrix.
+        """
         codec = self._effective_output_codec()
         hdr_mode = self._source_is_hdr()
         static_hdr = bool(
@@ -93,9 +101,14 @@ class _EncodeMixin:
                 )
                 self._hdr_software_warning_logged = True
         if hardware_matches and self.config.use_hw_encode and not static_hdr:
+            convert = (
+                self._sdr_conversion_filter(codec, hardware=True)
+                if rgb_frames else ""
+            )
             if self._hw_encoder.endswith("_d3d12va"):
                 base = [
-                    "-vf", "format=nv12,hwupload,scale_d3d12=w=iw:h=ih",
+                    "-vf",
+                    (convert or "format=nv12") + ",hwupload,scale_d3d12=w=iw:h=ih",
                     "-c:v", self._hw_encoder,
                     "-bf", "0", "-async_depth", "1",
                     "-rc_mode", "CQP", "-qp", str(self.config.output_quality),
@@ -113,6 +126,8 @@ class _EncodeMixin:
             else:
                 base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                         '-preset', 'medium']
+            if convert and not self._hw_encoder.endswith("_d3d12va"):
+                base += ["-vf", convert]
             return (
                 base
                 + self._hdr_pixel_format_args(codec, hardware=True)
@@ -130,12 +145,31 @@ class _EncodeMixin:
         else:
             base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                     '-preset', 'medium']
+        convert = self._sdr_conversion_filter(codec) if rgb_frames else ""
+        if convert:
+            base += ["-vf", convert]
         return (
             base
             + self._hdr_pixel_format_args(codec)
             + self._encoder_private_args(codec)
             + self._hdr_encode_args()
         )
+
+    def _sdr_conversion_filter(self, codec: str, *,
+                               hardware: bool = False) -> str:
+        # The source probe, not _color_metadata: the YUV layout has to come
+        # back even when the user turned colour tagging off, or NVENC still
+        # writes RGB H.264.
+        meta = (
+            getattr(self, "_source_color_probe", None)
+            or getattr(self, "_color_metadata", None)
+        )
+        if meta is None:
+            return ""
+        from backend.hdr import sdr_yuv_conversion_filter
+        return sdr_yuv_conversion_filter(
+            meta, codec, hardware=hardware,
+            preserve_tags=bool(self.config.preserve_color_metadata))
 
     def _source_is_hdr(self) -> bool:
         meta = getattr(self, "_color_metadata", None)
@@ -435,7 +469,7 @@ class _EncodeMixin:
                     '-framerate', f"{float(fps):.6f}",
                     '-i', str(pattern),
                 ]
-            cmd += self._get_encode_args()
+            cmd += self._get_encode_args(rgb_frames=True)
             if use_vfr:
                 cmd += [
                     '-fps_mode:v', 'passthrough',
@@ -509,7 +543,8 @@ class _EncodeMixin:
             _cleanup_temp_output(concat_path)
             _cleanup_temp_output(timing_carrier)
 
-    def _reencode_or_copy(self, source: str, output: str) -> str:
+    def _reencode_or_copy(self, source: str, output: str, *,
+                          rgb_frames: bool = True) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate
         if FFmpeg is unavailable or keeps failing."""
         temp_output = self._allocate_work_output(output)
@@ -518,7 +553,7 @@ class _EncodeMixin:
             cmd = [
                 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
             ] + self._d3d12_device_args() + ['-i', source]
-            cmd += self._get_encode_args()
+            cmd += self._get_encode_args(rgb_frames=rgb_frames)
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
             self._run_checked_ffmpeg(cmd, timeout)
@@ -544,7 +579,8 @@ class _EncodeMixin:
                         self._hw_encoder or "software",
                         exc.reason,
                     )
-                    return self._reencode_or_copy(source, output)
+                    return self._reencode_or_copy(
+                        source, output, rgb_frames=rgb_frames)
                 logger.warning(
                     "Re-encode failed integrity check (%s); salvaging intermediate.",
                     exc.reason,
@@ -557,7 +593,8 @@ class _EncodeMixin:
                         self._hw_encoder or "software",
                         exc,
                     )
-                    return self._reencode_or_copy(source, output)
+                    return self._reencode_or_copy(
+                        source, output, rgb_frames=rgb_frames)
                 return self._salvage_intermediate(source, output)
             logger.warning(
                 f"FFmpeg re-encode failed; salvaging intermediate: {exc}",
@@ -659,7 +696,7 @@ class _EncodeMixin:
                 # audio, and doubled the encode time, for no gain.
                 cmd += ['-c:v', 'copy']
             else:
-                cmd += self._get_encode_args()
+                cmd += self._get_encode_args(rgb_frames=True)
             cmd += build_container_mux_args(
                 plan,
                 input_index=1,
@@ -881,7 +918,8 @@ class _EncodeMixin:
             self._mark_container_payload_failed(
                 "Source container payload was omitted after the mux command failed."
             )
-            return self._reencode_or_copy(processed, output)
+            return self._reencode_or_copy(
+                processed, output, rgb_frames=not video_is_contract_ready)
         except FileNotFoundError:
             logger.warning("FFmpeg not found, saving video without audio")
             self._mark_container_payload_failed(

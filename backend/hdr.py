@@ -549,6 +549,103 @@ def hdr_pixel_format_args(
     return ["-pix_fmt", "p010le" if hardware else "yuv420p10le"]
 
 
+# cv2.VideoCapture turns every SDR YUV source into BGR with the BT.601
+# matrix whatever the stream's colour tags say, and assumes limited range
+# unless the decoder reports a yuvj format (full-range H.264 and HEVC do,
+# full-range VP9 does not). Measured on OpenCV 5.0.0 on 2026-09-26 against
+# bt709, bt470bg and untagged H.264 and full-range H.264, HEVC and VP9. The
+# final encode has to invert that exact conversion and only *tag* the
+# source's matrix and range: converting with the tagged matrix instead
+# shifts the colour of every pixel the job never touched.
+OPENCV_DECODE_MATRIX = "bt601"
+
+
+def yuv_chroma_layout(pixel_format: str) -> str:
+    """Return "420", "422" or "444" for a YUV or gray pixel format.
+
+    Empty for RGB and unknown formats, whose frames the pipeline already
+    encodes the way it always has.
+    """
+    name = str(pixel_format or "").strip().lower()
+    match = re.match(r"^yuv[ja]?(\d{3})", name)
+    if match:
+        layout = match.group(1)
+        return layout if layout in {"422", "444"} else "420"
+    if name.startswith(("gray", "nv12", "nv21", "p010", "p012", "p016")):
+        return "420"
+    if name.startswith((
+            "nv16", "nv20", "p210", "p212", "p216",
+            "yuyv", "uyvy", "yvyu", "y210", "y212")):
+        return "422"
+    if name.startswith(("nv24", "nv42", "p410", "p412", "p416")):
+        return "444"
+    return ""
+
+
+# Matrix names setparams accepts; anything else is relabelled "unknown"
+# rather than handed to FFmpeg as an option value it would reject.
+_SETPARAMS_COLOR_SPACES = {
+    "bt709", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco",
+    "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc",
+    "chroma-derived-c", "ictcp",
+}
+
+
+def sdr_yuv_conversion_filter(
+    meta: Optional[ColorMetadata],
+    codec: str,
+    *,
+    hardware: bool = False,
+    preserve_tags: bool = True,
+) -> str:
+    """-vf chain that returns the pipeline's BGR frames to the source's YUV.
+
+    Without it FFmpeg picks the pixel format and matrix itself: NVENC takes
+    the RGB frames as they are and writes RGB H.264 that most players cannot
+    decode, and libx264 writes High 4:4:4 from a 4:2:0 source. Empty for HDR
+    sources, which have their own 10-bit path, and for RGB or unknown ones.
+
+    The trailing setparams relabels the converted frames with the source's
+    tags without touching a pixel. It is not cosmetic: FFmpeg 9 negotiates
+    colour spaces through the filter graph, so frames still labelled BT.601
+    meet the encoder's ``-colorspace bt709`` and FFmpeg quietly inserts a
+    second conversion to BT.709, undoing the inverse above. Measured on flat
+    bands of a BT.709 source: 6.94 levels of luma error without the
+    relabel, 1.15 with it.
+    """
+    if meta is None or meta.is_hdr:
+        return ""
+    layout = yuv_chroma_layout(meta.pixel_format)
+    if not layout:
+        return ""
+    if hardware:
+        target = "nv12"  # the one layout NVENC, QSV, AMF and D3D12 all take
+    elif codec == "vvc":
+        target = "yuv420p10le"  # libvvenc accepts nothing else
+    elif codec == "av1":
+        target = "yuv420p"  # libsvtav1 is 4:2:0 only
+    else:
+        target = {"422": "yuv422p", "444": "yuv444p"}.get(layout, "yuv420p")
+    decoded_range = (
+        "pc" if str(meta.pixel_format or "").lower().startswith("yuvj")
+        else "tv"
+    )
+    matrix_tag = _normalized_transfer(meta.color_space)
+    range_tag = _normalized_transfer(meta.color_range)
+    if not preserve_tags or matrix_tag not in _SETPARAMS_COLOR_SPACES:
+        matrix_tag = "unknown"
+    if not preserve_tags or range_tag not in {"tv", "pc"}:
+        # An untagged range describes the data the conversion produced.
+        range_tag = decoded_range
+    # accurate_rnd: swscale's fast RGB-to-4:2:0 path rounds luma half a
+    # level darker again on top of whatever the decode already lost.
+    return (
+        f"scale=out_color_matrix={OPENCV_DECODE_MATRIX}:"
+        f"out_range={decoded_range}:flags=accurate_rnd,format={target},"
+        f"setparams=colorspace={matrix_tag}:range={range_tag}"
+    )
+
+
 def hdr_encoder_private_args(meta: Optional[ColorMetadata], codec: str) -> List[str]:
     """Codec-specific HDR parameters that container color tags do not cover."""
     if meta is None or not meta.is_hdr:

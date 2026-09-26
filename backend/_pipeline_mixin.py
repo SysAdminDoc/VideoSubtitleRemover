@@ -372,6 +372,7 @@ class _PipelineMixin:
         self.last_output_contract = {}
         self.last_container_payload = {}
         self._color_metadata = None
+        self._source_color_probe = None
         self._output_contract = None
         try:
             _ensure_output_parent(output_path)

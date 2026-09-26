@@ -428,6 +428,7 @@ class _FinalizeMixin:
                     logger.info(f"Source codec: {codec_line}")
             except Exception:
                 logger.warning("Source codec/color probe failed", exc_info=True)
+        self._source_color_probe = meta
         if self.config.preserve_color_metadata:
             self._color_metadata = meta
         hdr_meta = meta if self.config.preserve_color_metadata else None
